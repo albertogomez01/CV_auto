@@ -38,53 +38,90 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Premium Modern CSS & Mobile Responsiveness Styling
+# Native Smartphone App Shell & Premium CSS Styling
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+        -webkit-tap-highlight-color: transparent;
     }
     
-    /* Prevent iOS Safari automatic zooming on inputs */
+    /* Prevent iOS Safari automatic zooming on input focus */
     input, select, textarea {
         font-size: 16px !important;
     }
     
-    .main-header {
-        font-size: 2.2rem;
+    /* Hide Streamlit Header Chrome for immersive App feel */
+    header[data-testid="stHeader"] {
+        background: transparent !important;
+    }
+    footer {
+        display: none !important;
+    }
+    
+    /* Native App Bar Top Header */
+    .app-top-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        background: rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        margin-bottom: 16px;
+    }
+    
+    .app-title-box {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .app-title-text {
+        font-size: 1.25rem;
         font-weight: 800;
-        background: linear-gradient(90deg, #2563EB, #06B6D4);
+        color: #F8FAFC;
+        letter-spacing: -0.3px;
+    }
+    
+    .main-header {
+        font-size: 1.85rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.3rem;
+        margin-bottom: 0.25rem;
         line-height: 1.25;
+        letter-spacing: -0.5px;
     }
     
     .sub-header {
-        color: #475569;
-        font-size: 1.05rem;
+        color: #94A3B8;
+        font-size: 0.98rem;
         margin-bottom: 1.25rem;
-        line-height: 1.4;
+        line-height: 1.45;
     }
     
-    /* Touch-friendly buttons (min-height 48px for WCAG tap targets) */
+    /* Touch-friendly Native Buttons (Min 48px height) */
     .stButton>button {
-        border-radius: 12px !important;
-        font-weight: 600 !important;
+        border-radius: 14px !important;
+        font-weight: 700 !important;
         min-height: 48px !important;
         font-size: 0.96rem !important;
-        transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+        transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
     }
     .stButton>button:active {
-        transform: scale(0.98);
+        transform: scale(0.96);
     }
     
-    /* Mobile Touch Tabs */
+    /* Desktop Tab Bar */
     div[data-baseweb="tab-list"] {
         gap: 6px !important;
         overflow-x: auto !important;
@@ -93,94 +130,118 @@ st.markdown("""
         padding-bottom: 6px !important;
     }
     div[data-baseweb="tab"] {
-        padding: 10px 16px !important;
+        padding: 10px 18px !important;
         font-size: 0.95rem !important;
-        font-weight: 600 !important;
-        border-radius: 10px !important;
+        font-weight: 700 !important;
+        border-radius: 12px !important;
+        transition: all 0.2s ease !important;
     }
     
     /* Badges & Indicators */
     .score-badge-high {
-        background-color: #DCFCE7;
-        color: #166534;
+        background-color: rgba(34, 197, 94, 0.15);
+        color: #4ADE80;
         padding: 5px 12px;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 0.88rem;
-        border: 1px solid #BBF7D0;
+        font-size: 0.86rem;
+        border: 1px solid rgba(74, 222, 128, 0.3);
         display: inline-block;
         margin: 2px 4px 2px 0;
     }
     
     .score-badge-mid {
-        background-color: #FEF9C3;
-        color: #854D0E;
+        background-color: rgba(234, 179, 8, 0.15);
+        color: #FACC15;
         padding: 5px 12px;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 0.88rem;
-        border: 1px solid #FEF08A;
+        font-size: 0.86rem;
+        border: 1px solid rgba(250, 204, 21, 0.3);
         display: inline-block;
         margin: 2px 4px 2px 0;
     }
     
     .score-badge-low {
-        background-color: #FEE2E2;
-        color: #991B1B;
+        background-color: rgba(239, 68, 68, 0.15);
+        color: #F87171;
         padding: 5px 12px;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 0.88rem;
-        border: 1px solid #FECACA;
+        font-size: 0.86rem;
+        border: 1px solid rgba(248, 113, 113, 0.3);
         display: inline-block;
         margin: 2px 4px 2px 0;
     }
     
-    .cap-badge {
-        background-color: #F1F5F9;
-        color: #1E293B;
-        padding: 6px 14px;
-        border-radius: 8px;
-        font-weight: 600;
-        font-size: 0.9rem;
-        border: 1px solid #CBD5E1;
-        display: inline-block;
-        margin: 4px;
-    }
-    
-    /* Mobile-specific responsive adaptations */
+    /* NATIVE MOBILE BOTTOM NAVIGATION BAR & SMARTPHONE SHELL */
     @media (max-width: 768px) {
+        /* Immersive Smartphone Container Padding */
+        .block-container {
+            padding-left: 0.75rem !important;
+            padding-right: 0.75rem !important;
+            padding-top: 0.5rem !important;
+            padding-bottom: 95px !important; /* Prevents content overlap with bottom nav */
+        }
+        
         .main-header {
-            font-size: 1.55rem !important;
+            font-size: 1.45rem !important;
         }
         .sub-header {
-            font-size: 0.9rem !important;
+            font-size: 0.88rem !important;
             margin-bottom: 1rem !important;
         }
-        .block-container {
-            padding-left: 0.6rem !important;
-            padding-right: 0.6rem !important;
-            padding-top: 0.8rem !important;
+        
+        /* Convert Streamlit Tabs into a Real Fixed Mobile Bottom Nav Bar */
+        div[data-baseweb="tab-list"] {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            z-index: 999999 !important;
+            background: rgba(15, 23, 42, 0.94) !important;
+            backdrop-filter: blur(20px) !important;
+            -webkit-backdrop-filter: blur(20px) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+            padding: 8px 4px 14px 4px !important;
+            display: flex !important;
+            justify-content: space-around !important;
+            align-items: center !important;
+            box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.4) !important;
+            margin: 0 !important;
         }
-        /* Automatically stack columns vertically on mobile screens */
+        
+        div[data-baseweb="tab"] {
+            flex: 1 !important;
+            text-align: center !important;
+            padding: 8px 2px !important;
+            font-size: 0.78rem !important;
+            border-radius: 10px !important;
+            margin: 0 2px !important;
+        }
+        
+        /* Auto-stack columns vertically on smartphone screens */
         div[data-testid="column"] {
             width: 100% !important;
             flex: 1 1 100% !important;
             min-width: 100% !important;
-            margin-bottom: 0.5rem !important;
+            margin-bottom: 0.6rem !important;
         }
-        /* Mobile tap buttons full-width */
+        
+        /* Full width touch targets */
         .stButton>button {
             width: 100% !important;
             min-height: 48px !important;
-            font-size: 0.95rem !important;
-        }
-        div[data-baseweb="tab"] {
-            padding: 8px 12px !important;
-            font-size: 0.85rem !important;
+            font-size: 0.96rem !important;
         }
     }
 </style>
+
+<!-- Mobile PWA Meta Headers -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#0F172A">
 """, unsafe_allow_html=True)
 
 def run_async(coro):
