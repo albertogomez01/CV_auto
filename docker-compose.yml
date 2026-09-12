@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  cv_auto_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cv_auto_app_247
+    ports:
+      - "8000:8000"
+      - "8501:8501"
+    env_file:
+      - .env
+    environment:
+      - AUTOPILOT_AUTOSTART=${AUTOPILOT_AUTOSTART:-true}
+      - AUTOPILOT_INTERVAL=${AUTOPILOT_INTERVAL:-30}
+      - AUTOPILOT_KEYWORDS=${AUTOPILOT_KEYWORDS:-Mozo, Auxiliar administrativo, Desarrollador Python}
+      - AUTOPILOT_LOCATION=${AUTOPILOT_LOCATION:-Alicante}
+    volumes:
+      - ./storageState.json:/app/storageState.json
+      - ./applications.db:/app/applications.db
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    restart: always

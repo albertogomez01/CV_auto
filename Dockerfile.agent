@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Copy requirements and install
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application files
+COPY agent.yml .
+COPY agent_runner.py .
+COPY .env* .
+
+ENV RUNNING_IN_DOCKER=true
+
+CMD ["python", "agent_runner.py"]

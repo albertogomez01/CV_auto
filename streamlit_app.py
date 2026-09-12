@@ -1,0 +1,1123 @@
+import sys
+import asyncio
+import os
+import json
+import io
+import streamlit as st
+import pandas as pd
+import requests
+from dotenv import load_dotenv
+
+# Configure Windows asyncio ProactorEventLoopPolicy for Playwright compatibility
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
+from playwright.async_api import async_playwright
+import database
+import importlib
+importlib.reload(database)
+from infojobs_scraper import search_jobs, apply_to_job
+import infojobs_scraper
+importlib.reload(infojobs_scraper)
+from indeed_scraper import search_indeed
+import indeed_scraper
+importlib.reload(indeed_scraper)
+from jooble_scraper import search_jooble
+import jooble_scraper
+importlib.reload(jooble_scraper)
+from telegram_notifier import send_telegram_notification, test_telegram_connection
+from login_setup import run_login_setup
+
+load_dotenv()
+
+# Page configuration
+st.set_page_config(
+    page_title="Agente Autónomo InfoJobs + Gemini",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Premium Modern CSS Styling
+st.markdown("""
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    
+    html, body, [class*="css"] {
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    
+    .main-header {
+        font-size: 2.3rem;
+        font-weight: 800;
+        background: linear-gradient(90deg, #2563EB, #06B6D4);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin-bottom: 0.2rem;
+    }
+    
+    .sub-header {
+        color: #475569;
+        font-size: 1.05rem;
+        margin-bottom: 1.5rem;
+    }
+    
+    .score-badge-high {
+        background-color: #DCFCE7;
+        color: #166534;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        border: 1px solid #BBF7D0;
+        display: inline-block;
+    }
+    
+    .score-badge-mid {
+        background-color: #FEF9C3;
+        color: #854D0E;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        border: 1px solid #FEF08A;
+        display: inline-block;
+    }
+    
+    .score-badge-low {
+        background-color: #FEE2E2;
+        color: #991B1B;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-weight: 700;
+        font-size: 0.9rem;
+        border: 1px solid #FECACA;
+        display: inline-block;
+    }
+    
+    .cap-badge {
+        background-color: #F1F5F9;
+        color: #1E293B;
+        padding: 6px 14px;
+        border-radius: 8px;
+        font-weight: 600;
+        font-size: 0.92rem;
+        border: 1px solid #CBD5E1;
+        display: inline-block;
+        margin: 4px;
+    }
+    
+    .stButton>button {
+        border-radius: 8px;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+def run_async(coro):
+    """Safely execute async Playwright tasks in Streamlit."""
+    if sys.platform == "win32":
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+def extract_text_from_file(uploaded_file) -> str:
+    """Extracts raw text from uploaded PDF or TXT file."""
+    filename = uploaded_file.name.lower()
+    if filename.endswith(".pdf"):
+        try:
+            import pypdf
+            pdf_reader = pypdf.PdfReader(io.BytesIO(uploaded_file.read()))
+            text = "\n".join([page.extract_text() or "" for page in pdf_reader.pages])
+            return text.strip()
+        except Exception as e:
+            st.error(f"Error al leer el archivo PDF: {e}")
+            return ""
+    else:
+        try:
+            return uploaded_file.read().decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            st.error(f"Error al leer el archivo de texto: {e}")
+            return ""
+
+def get_gemini_client(api_key: str):
+    """Initializes Gemini API client using available SDK."""
+    effective_key = api_key.strip() if api_key else os.getenv("GEMINI_API_KEY", "").strip()
+    try:
+        from google import genai
+        return ("genai_new", genai.Client(api_key=effective_key))
+    except Exception:
+        try:
+            import google.generativeai as genai_old
+            genai_old.configure(api_key=effective_key)
+            return ("genai_old", genai_old)
+        except Exception:
+            return ("http", effective_key)
+
+def evaluate_job_with_gemini(api_key: str, cv_text: str, job: dict, sector: str = "") -> dict:
+    """Evaluates a single job offer against CV using Gemini model, adapting context to sector."""
+    client_type, client = get_gemini_client(api_key)
+    
+    sector_info = f"\n- SECTOR DE LA VACANTE: {sector}\n" if sector else ""
+    
+    prompt = f"""
+Eres un asesor de selección de personal experto en evaluar candidaturas para el mercado laboral español en InfoJobs.
+A continuación tienes el Currículum Vitae del candidato:
+
+--- CURRÍCULUM VITAE ---
+{cv_text}
+------------------------
+
+Debes evaluar la coincidencia del candidato para la siguiente vacante de empleo en InfoJobs:{sector_info}
+- Título: {job.get('title', '')}
+- Empresa: {job.get('company', '')}
+- Salario publicado: {job.get('salary', 'Salario no disponible')}
+- Enlace: {job.get('link', '')}
+- Descripción: {job.get('description', '')}
+- Preguntas de filtrado (Killer Questions): {json.dumps(job.get('killer_questions', []), ensure_ascii=False)}
+
+REGLAS DE EVALUACIÓN ADAPTADAS SEGÚN EL SECTOR:
+- Si el puesto es de Hostelería, Reposición, Comercio o Logística: pondera la atención al cliente, actitud proactiva, agilidad, cobro en caja, preparación de pedidos y trabajo en equipo.
+- Si el puesto es de Administración o Gestión (Perfil ADE): pondera la organización, formación contable/administrativa, gestión de pedidos/facturación y manejo de herramientas de ofimática.
+- Si el puesto es de Tecnología, Programación o IA: pondera las competencias técnicas en Python, automatización, integraciones de APIs y herramientas de LLM/IA.
+
+TAREA:
+1. Analiza las habilidades y requisitos contra el CV adaptando el foco al sector de la vacante.
+2. Calcula una puntuación de coincidencia (% score del 0 al 100).
+3. Escribe un EXTRACTO EJECUTIVO (2-3 frases) sobre la empresa y qué buscan en el puesto.
+4. Si hay preguntas de filtrado (killer questions), genera respuestas coherentes, profesionales y en primera persona alineadas estrictamente con el CV y adaptadas al sector.
+5. Responde ÚNICAMENTE con un objeto JSON válido con la estructura exacta:
+
+{{
+  "score": 85,
+  "reasoning": "Explicación breve de la coincidencia...",
+  "company_extract": "Extracto de la empresa y la vacante...",
+  "killer_answers": [
+    {{
+      "question": "Texto exacto de la pregunta",
+      "answer": "Respuesta optimizada adaptada al puesto y basada en el CV"
+    }}
+  ]
+}}
+"""
+
+    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    response_text = ""
+    
+    for m in candidate_models:
+        try:
+            if client_type == "genai_new":
+                res = client.models.generate_content(model=m, contents=prompt)
+                response_text = res.text
+            elif client_type == "genai_old":
+                gen_m = client.GenerativeModel(m)
+                res = gen_m.generate_content(prompt)
+                response_text = res.text
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={client}"
+                r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
+                r.raise_for_status()
+                response_text = r.json()['candidates'][0]['content']['parts'][0]['text']
+            break
+        except Exception:
+            continue
+
+    clean_json = response_text.strip()
+    if clean_json.startswith("```"):
+        lines = clean_json.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        clean_json = "\n".join(lines).strip()
+
+    try:
+        return json.loads(clean_json)
+    except Exception:
+        return {
+            "score": 50,
+            "reasoning": "Evaluación de perfil completada.",
+            "company_extract": f"Oferta de empleo en {job.get('company', 'la empresa')} para el puesto de {job.get('title', 'Puesto vacante')}.",
+            "killer_answers": [{"question": q, "answer": "Tengo experiencia sólida y disponibilidad para el puesto."} for q in job.get("killer_questions", [])]
+        }
+
+def generate_cover_letter_with_gemini(api_key: str, cv_text: str, job: dict) -> str:
+    """Generates a professional Spanish Cover Letter tailored to a target job offer using Gemini."""
+    client_type, client = get_gemini_client(api_key)
+    
+    prompt = f"""
+Eres un consultor de selección y redacción profesional de candidaturas en España.
+Escribe una CARTA DE PRESENTACIÓN (Cover Letter) persuasiva, elegante, profesional y formal en español para postular a la siguiente oferta de empleo:
+
+- Puesto: {job.get('title', '')}
+- Empresa: {job.get('company', '')}
+- Ubicación: {job.get('location', '')}
+- Salario: {job.get('salary', 'No especificado')}
+
+--- CURRÍCULUM VITAE DEL CANDIDATO ---
+{cv_text}
+-------------------------------------
+
+REQUISITOS DE LA CARTA:
+1. Longitud: 3-4 párrafos bien estructurados (Estimado/a responsable de selección, Introducción entusiasta, Por qué mi perfil aporta valor, Conclusión con llamada a la acción para entrevista).
+2. Tono: Profesional, motivador, conciso y convincente.
+3. Resalta 2 o 3 logros o competencias clave del CV que mejor se conecten con las necesidades del puesto.
+4. Devuelve ÚNICAMENTE el texto de la carta de presentación formateado en Markdown limpio (sin comillas extra ni explicaciones adicionales).
+"""
+    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    for m in candidate_models:
+        try:
+            if client_type == "genai_new":
+                res = client.models.generate_content(model=m, contents=prompt)
+                return res.text.strip()
+            elif client_type == "genai_old":
+                gen_m = client.GenerativeModel(m)
+                res = gen_m.generate_content(prompt)
+                return res.text.strip()
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={client}"
+                r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
+                r.raise_for_status()
+                return r.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+        except Exception:
+            continue
+
+    return f"Estimados/as responsables de selección de {job.get('company', 'la empresa')},\n\nMe dirijo a ustedes para presentar mi candidatura al puesto de {job.get('title', 'la oferta de empleo')}. Cuento con experiencia sólida y una trayectoria orientada a resultados que se alinea perfectamente con sus necesidades.\n\nQuedo a su disposición para mantener una entrevista personal.\n\nAtentamente,\nEl Candidato"
+
+def extract_job_keywords_from_cv(api_key: str, cv_text: str) -> dict:
+    """Classifies candidate profile into 3 independent multirubro sectors using Gemini:
+    1. Hostelería, Comercio y Logística
+    2. Administración y Gestión (Perfil ADE)
+    3. Tecnología e Inteligencia Artificial
+    """
+    client_type, client = get_gemini_client(api_key)
+    
+    prompt = f"""
+Eres un Arquitecto de Reclutamiento e Integración de IA especializado en InfoJobs España y evaluación de perfiles híbridos/multirubro.
+Analiza detenidamente el siguiente Currículum Vitae y clasifica la experiencia, formación y competencias del usuario en 3 CATEGORÍAS INDEPENDIENTES DE BÚSQUEDA en InfoJobs:
+
+1. Hostelería, Comercio y Logística: Camarero, Mozo de almacén, Cajero, Reponedor, Atención al cliente, Preparación de pedidos.
+2. Administración y Gestión (Perfil ADE): Auxiliar administrativo, Administrativo de compras/ventas, Gestión de pedidos, Soporte contable.
+3. Tecnología e Inteligencia Artificial: Desarrollador Junior Python/IA, Prompt Engineer, Integrador de APIs/LLMs, Automatizador de procesos.
+
+Debes responder ÚNICAMENTE con un objeto JSON válido con este formato exacto (sin markdown alrededor ni texto extra):
+
+{{
+  "categorias_detectadas": {{
+    "hosteleria_logistica": [
+      "Mozo/a de almacén y logística",
+      "Cajero/a y Atención al cliente",
+      "Reponedor/a de supermercado",
+      "Hostelería / Camarero/a"
+    ],
+    "administracion_ade": [
+      "Auxiliar Administrativo/a",
+      "Gestión de pedidos y compras",
+      "Administrativo/a de ventas"
+    ],
+    "tecnologia_ia": [
+      "Desarrollador/a Python / IA",
+      "Prompt Engineer / Automatizador LLM",
+      "Integrador de APIs / Web Scraping"
+    ]
+  }},
+  "localidad": "Alicante",
+  "habilidades_por_area": {{
+    "hosteleria_logistica": "Atención al cliente, cobro en caja, control de stock, reposición, picking y preparación de pedidos.",
+    "administracion_ade": "Gestión documental, facturación, soporte contable, paquete Office y atención telefónica.",
+    "tecnologia_ia": "Python, integración de APIs REST, modelos LLM/Gemini, automatización web con Playwright y Git."
+  }},
+  "reasoning": "Perfil híbrido versátil con competencias sólidas en operativa comercial, gestión administrativa y desarrollo de soluciones de IA."
+}}
+
+--- CURRÍCULUM VITAE ---
+{cv_text}
+------------------------
+"""
+    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    response_text = ""
+    
+    for m in candidate_models:
+        try:
+            if client_type == "genai_new":
+                res = client.models.generate_content(model=m, contents=prompt)
+                response_text = res.text
+            elif client_type == "genai_old":
+                gen_m = client.GenerativeModel(m)
+                res = gen_m.generate_content(prompt)
+                response_text = res.text
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={client}"
+                r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
+                r.raise_for_status()
+                response_text = r.json()['candidates'][0]['content']['parts'][0]['text']
+            break
+        except Exception:
+            continue
+
+    clean_json = response_text.strip()
+    if clean_json.startswith("```"):
+        lines = clean_json.split("\n")
+        if lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        clean_json = "\n".join(lines).strip()
+
+    try:
+        return json.loads(clean_json)
+    except Exception:
+        return {
+            "categorias_detectadas": {
+                "hosteleria_logistica": [
+                    "Mozo/a de almacén y logística",
+                    "Cajero/a y Atención al cliente",
+                    "Reponedor/a de supermercado",
+                    "Hostelería / Camarero/a"
+                ],
+                "administracion_ade": [
+                    "Auxiliar Administrativo/a",
+                    "Gestión de pedidos y compras"
+                ],
+                "tecnologia_ia": [
+                    "Desarrollador/a Python / IA",
+                    "Prompt Engineer / Automatizador LLM"
+                ]
+            },
+            "localidad": "Alicante",
+            "habilidades_por_area": {
+                "hosteleria_logistica": "Atención al cliente, cobro en caja, reposición y almacén.",
+                "administracion_ade": "Auxiliar administrativo, facturación y gestión.",
+                "tecnologia_ia": "Python, integración de APIs y automatización con IA."
+            },
+            "reasoning": "Perfil híbrido multitarea procesado correctamente."
+        }
+
+def chat_with_assistant(api_key: str, chat_history: list, cv_text: str = "", evaluated_jobs: list = None) -> str:
+    """Converses naturally with the candidate as an intelligent human recruitment advisor."""
+    effective_key = api_key.strip() if api_key else os.getenv("GEMINI_API_KEY", "").strip()
+    if not effective_key:
+        return "⚠️ **No se ha detectado una clave de API de Gemini (GEMINI_API_KEY).**\n\nPor favor, introduce tu Gemini API Key en el menú lateral de la izquierda (puedes conseguir una gratis en [Google AI Studio](https://aistudio.google.com/app/apikey)) para activar mi inteligencia."
+
+    client_type, client = get_gemini_client(effective_key)
+    
+    cv_summary = f"--- CURRÍCULUM VITAE DEL CANDIDATO ---\n{cv_text}\n------------------------\n" if cv_text else "El usuario aún no ha cargado su CV."
+    
+    jobs_summary = ""
+    if evaluated_jobs:
+        jobs_summary = f"--- VACANTES EVALUADAS RECIENTEMENTE EN INFOJOBS ({len(evaluated_jobs)}) ---\n"
+        for idx, j in enumerate(evaluated_jobs[:5], 1):
+            jobs_summary += f"{idx}. Puesto: {j.get('title')} en {j.get('company')} (Salario: {j.get('salary', 'N/D')}) (% Coincidencia: {j.get('score')}%)\n   Resumen: {j.get('company_extract')}\n"
+        jobs_summary += "---------------------------------------------------------\n"
+
+    system_instruction = f"""
+Eres "Oriol", un asesor personal de empleo altamente inteligente, empático, cercano y humano.
+Hablas y te expresas exactamente como una persona real, atenta, profesional y motivadora, experta en orientación laboral en España (InfoJobs) y mercado de trabajo (Alicante y nacional).
+
+REGLAS DE INTERACCIÓN:
+1. Sé natural, fluido, empático y conversacional. Habla como una persona real en una charla cara a cara o por mensaje.
+2. Orienta al usuario sobre la búsqueda de empleo para sus puestos de interés, salarios, modalidades y requisitos.
+3. Si el usuario te pregunta sobre las ofertas encontradas o su CV, aprovecha la información del contexto para darle respuestas personalizadas.
+4. Responde siempre en español fluido y en tono cercano y profesional.
+
+CONTEXTO DE LA SESIÓN:
+{cv_summary}
+{jobs_summary}
+"""
+
+    prompt = system_instruction + "\n\nHISTORIAL DE CONVERSACIÓN RECIENTE:\n"
+    for msg in chat_history[-10:]:
+        sender = "Candidato" if msg["role"] == "user" else "Oriol (Asesor)"
+        prompt += f"{sender}: {msg['content']}\n"
+    
+    prompt += "\nOriol (Asesor):"
+
+    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    response_text = ""
+    last_exception = None
+
+    for m in candidate_models:
+        try:
+            if client_type == "genai_new":
+                res = client.models.generate_content(model=m, contents=prompt)
+                response_text = res.text
+            elif client_type == "genai_old":
+                gen_m = client.GenerativeModel(m)
+                res = gen_m.generate_content(prompt)
+                response_text = res.text
+            else:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent?key={client}"
+                r = requests.post(url, json={"contents": [{"parts": [{"text": prompt}]}]}, timeout=30)
+                r.raise_for_status()
+                response_text = r.json()['candidates'][0]['content']['parts'][0]['text']
+            if response_text and response_text.strip():
+                break
+        except Exception as e:
+            last_exception = e
+            continue
+
+    if response_text and response_text.strip():
+        return response_text.strip()
+    
+    err_msg = str(last_exception) if last_exception else "Error de conexión"
+    if "API_KEY_INVALID" in err_msg or "400" in err_msg or "403" in err_msg or "not valid" in err_msg.lower():
+        return f"⚠️ **Error en la API Key de Gemini**\n\nLa clave de API actual no es válida o ha sido rechazada por Google.\n*Detalle del error:* `{err_msg}`\n\n👉 Introduce una API Key válida de [Google AI Studio](https://aistudio.google.com/app/apikey) en el menú lateral de la izquierda."
+    else:
+        return f"⚠️ **No pude conectarme con el servicio de IA de Gemini**\n\n*Detalle del error:* `{err_msg}`\n\nPor favor, verifica tu conexión o introduce tu API Key en la barra lateral."
+
+# Sidebar Setup
+st.sidebar.image("https://www.infojobs.net/ij-static/ij-core/images/infojobs-logo.svg", width=180)
+st.sidebar.title("⚙️ Configuración")
+
+api_key_input = st.sidebar.text_input("🔑 Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
+
+session_exists = os.path.exists("storageState.json")
+if session_exists:
+    st.sidebar.success("✅ Sesión InfoJobs Activa (`storageState.json`)")
+else:
+    st.sidebar.warning("⚠️ No hay sesión guardada.")
+
+if st.sidebar.button("🔑 Iniciar Sesión Manual en InfoJobs", use_container_width=True):
+    st.info("Se abrirá Chromium en modo visible. Inicia sesión en InfoJobs y presiona ENTER en la consola...")
+    try:
+        run_async(run_login_setup())
+        st.success("¡Sesión guardada correctamente!")
+        st.rerun()
+    except Exception as e:
+        st.error(f"Error al iniciar sesión: {e}")
+
+st.sidebar.divider()
+st.sidebar.markdown("### ✈️ Alertas de Telegram (Opcional)")
+telegram_token_input = st.sidebar.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", ""), type="password")
+telegram_chat_id_input = st.sidebar.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", ""))
+
+if st.sidebar.button("📡 Probación Notificación Telegram", use_container_width=True):
+    if not telegram_token_input or not telegram_chat_id_input:
+        st.sidebar.error("Introduce tu Token y Chat ID arriba.")
+    else:
+        with st.spinner("Enviando mensaje de prueba..."):
+            res = run_async(test_telegram_connection(telegram_token_input, telegram_chat_id_input))
+            if res.get("status") == "success":
+                st.sidebar.success("✅ ¡Notificación de prueba enviada a Telegram!")
+            else:
+                st.sidebar.error(f"❌ {res.get('message')}")
+
+st.sidebar.divider()
+st.sidebar.markdown("### 🤖 Piloto Automático (Segundo Plano)")
+
+def get_backend_scheduler_status():
+    try:
+        r = requests.get("http://localhost:8000/scheduler/status", timeout=2)
+        if r.status_code == 200:
+            return r.json().get("state", {})
+    except Exception:
+        pass
+    return {}
+
+sched_state = get_backend_scheduler_status()
+is_active_current = sched_state.get("is_active", False)
+interval_current = sched_state.get("interval_minutes", 30)
+
+autopilot_active = st.sidebar.toggle("⚡ Activar Piloto Automático", value=is_active_current)
+autopilot_interval = st.sidebar.select_slider(
+    "⏱️ Intervalo de ejecución (minutos)",
+    options=[5, 15, 30, 60, 120, 240, 720],
+    value=interval_current if interval_current in [5, 15, 30, 60, 120, 240, 720] else 30
+)
+
+if autopilot_active != is_active_current or (autopilot_active and autopilot_interval != interval_current):
+    effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+    cv_txt = st.session_state.get("cv_text", "")
+    if autopilot_active:
+        payload = {
+            "interval_minutes": autopilot_interval,
+            "keywords": "Mozo, Auxiliar administrativo, Desarrollador Python",
+            "location": "Alicante",
+            "cv_text": cv_txt,
+            "gemini_key": effective_key,
+            "telegram_token": telegram_token_input,
+            "telegram_chat_id": telegram_chat_id_input,
+            "run_immediately": False
+        }
+        try:
+            r = requests.post("http://localhost:8000/scheduler/start", json=payload, timeout=5)
+            if r.status_code == 200:
+                st.sidebar.success(f"🟢 Piloto Automático ACTIVADO (cada {autopilot_interval} min)")
+            else:
+                st.sidebar.error("Error al iniciar el piloto automático en FastAPI.")
+        except Exception as e:
+            st.sidebar.warning("⚡ Para activar el Piloto Automático en segundo plano, asegúrate de que `main.py` esté ejecutándose.")
+    else:
+        try:
+            r = requests.post("http://localhost:8000/scheduler/stop", timeout=5)
+            if r.status_code == 200:
+                st.sidebar.info("🔴 Piloto Automático DETENIDO")
+        except Exception:
+            pass
+
+if is_active_current:
+    st.sidebar.success(f"🟢 **Activo** (Cada {interval_current} min)")
+    if sched_state.get("last_run"):
+        st.sidebar.caption(f"⏱️ **Última ejec:** `{sched_state['last_run'][:19].replace('T', ' ')}`")
+    if sched_state.get("next_run"):
+        st.sidebar.caption(f"🔮 **Próxima ejec:** `{sched_state['next_run'][:19].replace('T', ' ')}`")
+else:
+    st.sidebar.info("🔴 **Inactivo**")
+
+st.sidebar.divider()
+headless_option = st.sidebar.checkbox("Modo Oculto (Headless)", value=False)
+
+# Main App Header
+st.markdown('<div class="main-header">🤖 Agente Autónomo Multi-Portal (InfoJobs + Indeed + Jooble)</div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-header">Búsqueda concurrente en InfoJobs, Indeed y Jooble, cartas de presentación personalizadas, alertas Telegram y analítica</div>', unsafe_allow_html=True)
+
+# Main Navigation Tabs
+tab_workflow, tab_chat, tab_direct, tab_history, tab_analytics = st.tabs([
+    "🚀 Agente Autónomo (Filtros & Postulación)",
+    "💬 Chat con Oriol (Asesor Personal)",
+    "⚡ Postulación Directa por URL", 
+    "📊 Historial (jobs.db)",
+    "📈 Analítica & Funnel"
+])
+
+# ==============================================================================
+# TAB 1: DYNAMIC PROFILE EXTRACTION & CUSTOM FILTERS PANEL
+# ==============================================================================
+with tab_workflow:
+    # STEP 1: UPLOAD / EDIT CV
+    st.markdown("### 1️⃣ Carga de Currículum Vitae")
+    
+    cv_col1, cv_col2 = st.columns([1, 1])
+    with cv_col1:
+        uploaded_cv = st.file_uploader("📂 Sube tu CV (PDF o TXT)", type=["pdf", "txt", "md"])
+    
+    cv_text = ""
+    if uploaded_cv is not None:
+        cv_text = extract_text_from_file(uploaded_cv)
+        st.success(f"✅ CV cargado correctamente ({len(cv_text)} caracteres leídos)")
+    
+    with cv_col2:
+        with st.expander("✏️ O edita/pega el texto de tu CV aquí", expanded=(not cv_text)):
+            cv_text = st.text_area("Texto del CV", value=cv_text if cv_text else """
+Candidato: Alex González
+Ubicación: Alicante
+Perfil: Desarrollador y especialista polivalente en atención al cliente, logística, reposición y servicios.
+
+Experiencia y Capacidades:
+- Desarrollador Python, JavaScript y automatización de procesos web.
+- Atención al cliente y cobro en caja (Cajero/a en supermercados y comercio).
+- Reposición de mercancía, colocación en lineal, control de fechas de caducidad e inventario (Reponedor/a).
+- Recepción de palés, preparación de pedidos (picking/packing), uso de transpaleta manual (Mozo de almacén / Logística).
+- Carné de conducir B, vehículo propio y disponibilidad inmediata.
+""", height=160)
+
+    st.session_state["cv_text"] = cv_text
+    st.divider()
+
+    # STEP 2: DYNAMIC PROFILE EXTRACTION & MULTIRUBRO FILTERS PANEL
+    st.markdown("### 2️⃣ Clasificación Multirubro de Perfil & Selección de Sectores")
+    
+    # Auto-run profile extraction if CV exists and proposal not in session
+    effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+    if cv_text and "cv_proposal" not in st.session_state and effective_key:
+        with st.spinner("🧠 Gemini está analizando tu CV para clasificar tu perfil en 3 ramas multirubro..."):
+            st.session_state["cv_proposal"] = extract_job_keywords_from_cv(effective_key, cv_text)
+
+    cv_proposal = st.session_state.get("cv_proposal", {})
+    categories_detected = cv_proposal.get("categorias_detectadas", {
+        "hosteleria_logistica": ["Mozo/a de almacén y logística", "Cajero/a y Atención al cliente", "Reponedor/a de supermercado", "Hostelería / Camarero/a"],
+        "administracion_ade": ["Auxiliar Administrativo/a", "Gestión de pedidos y compras"],
+        "tecnologia_ia": ["Desarrollador/a Python / IA", "Prompt Engineer / Automatizador LLM"]
+    })
+    skills_by_area = cv_proposal.get("habilidades_por_area", {})
+    loc_detected = cv_proposal.get("localidad", "Alicante")
+
+    # Display Multirubro Detected Competencies
+    if skills_by_area:
+        st.markdown("**🧠 Habilidades Detectadas por Área de Desempeño:**")
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.markdown("📦 **Hostelería / Logística**")
+            st.caption(skills_by_area.get("hosteleria_logistica", "Atención al cliente, reposición, cobro."))
+        with col_s2:
+            st.markdown("📊 **Administración / ADE**")
+            st.caption(skills_by_area.get("administracion_ade", "Gestión documental, facturación, paquete Office."))
+        with col_s3:
+            st.markdown("💻 **Tech / IA**")
+            st.caption(skills_by_area.get("tecnologia_ia", "Python, APIs REST, automatización con IA."))
+        st.write("")
+
+    # Sector Multiselect Filter Options
+    st.markdown("**🎯 Selecciona las Ramas de Empleo a Consultar en esta Búsqueda:**")
+    sec_c1, sec_c2, sec_c3, sec_c4 = st.columns(4)
+    with sec_c1:
+        sel_all = st.checkbox("🌐 Todos los sectores", value=True)
+    with sec_c2:
+        sel_log = st.checkbox("📦 Hostelería, Reposición y Logística", value=True)
+    with sec_c3:
+        sel_adm = st.checkbox("📊 Administración y ADE", value=True)
+    with sec_c4:
+        sel_tech = st.checkbox("💻 Programación & IA", value=True)
+
+    # Gather selected sector keywords
+    selected_sector_keywords = []
+    if sel_all or sel_log:
+        for kw in categories_detected.get("hosteleria_logistica", []):
+            selected_sector_keywords.append((kw, "Hostelería, Comercio y Logística"))
+    if sel_all or sel_adm:
+        for kw in categories_detected.get("administracion_ade", []):
+            selected_sector_keywords.append((kw, "Administración y ADE"))
+    if sel_all or sel_tech:
+        for kw in categories_detected.get("tecnologia_ia", []):
+            selected_sector_keywords.append((kw, "Tecnología e IA"))
+
+    f_col1, f_col2 = st.columns([2, 1])
+    with f_col1:
+        custom_job = st.text_input("➕ Puesto personalizado adicional (opcional)", placeholder="Ej: Carretillero / Fontanero / Recepcionista")
+        if custom_job.strip():
+            selected_sector_keywords.append((custom_job.strip(), "General"))
+    with f_col2:
+        loc_input_str = st.text_input("Localidad / Provincia", value=loc_detected if loc_detected else "Alicante")
+
+    max_res_val = st.slider("Máximo de Ofertas a Consultar por Categoría", min_value=1, max_value=15, value=6)
+
+    st.write("")
+    if st.button("🚀 Buscar Candidaturas Multirubro", type="primary", use_container_width=True, key="btn_search_multirubro"):
+        effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+        if not effective_key:
+            st.error("Por favor, introduce tu Gemini API Key en la barra lateral.")
+        elif not cv_text.strip():
+            st.error("Por favor, sube tu CV o edita el texto arriba.")
+        elif not selected_sector_keywords:
+            st.error("Por favor, marca al menos un sector de búsqueda arriba.")
+        else:
+            target_loc = loc_input_str.strip() if loc_input_str.strip() else "Alicante"
+            st.info(f"🔎 Buscando vacantes activas en InfoJobs, Indeed y Jooble en `{target_loc}` a través de los sectores seleccionados...")
+            
+            all_found_jobs = []
+            search_status = st.empty()
+            
+            with st.spinner(f"⚡ Consultando InfoJobs, Indeed y Jooble para {len(selected_sector_keywords)} búsquedas en paralelo..."):
+                async def do_search_all_fast():
+                    async with async_playwright() as p:
+                        dedup_map = {}
+                        for term, sector_label in selected_sector_keywords:
+                            try:
+                                ij_task = search_jobs(
+                                    playwright=p,
+                                    keywords=term,
+                                    location=target_loc,
+                                    max_results=max_res_val,
+                                    headless=headless_option
+                                )
+                                ind_task = search_indeed(
+                                    keywords=term,
+                                    location=target_loc,
+                                    max_results=max_res_val,
+                                    playwright=p
+                                )
+                                jooble_task = search_jooble(
+                                    keywords=term,
+                                    location=target_loc,
+                                    max_results=max_res_val
+                                )
+                                ij_res, ind_res, jooble_res = await asyncio.gather(ij_task, ind_task, jooble_task, return_exceptions=True)
+                                
+                                if isinstance(ij_res, Exception):
+                                    print(f"Warning InfoJobs search '{term}': {ij_res}")
+                                    ij_res = []
+                                if isinstance(ind_res, Exception):
+                                    print(f"Warning Indeed search '{term}': {ind_res}")
+                                    ind_res = []
+                                if isinstance(jooble_res, Exception):
+                                    print(f"Warning Jooble search '{term}': {jooble_res}")
+                                    jooble_res = []
+
+                                for j in (ij_res + ind_res + jooble_res):
+                                    key = (j.get("title", "").strip().lower(), j.get("company", "").strip().lower())
+                                    if key in dedup_map:
+                                        existing = dedup_map[key]
+                                        ex_p = set(existing.get("platform", "").split(", "))
+                                        new_p = set(j.get("platform", "").split(", "))
+                                        comb_p = sorted(list(ex_p | new_p))
+                                        existing["platform"] = ", ".join(comb_p)
+                                        if not existing.get("link") and j.get("link"):
+                                            existing["link"] = j["link"]
+                                    else:
+                                        j_copy = dict(j)
+                                        j_copy["sector"] = sector_label
+                                        dedup_map[key] = j_copy
+                            except Exception as ex:
+                                print(f"Warning searching {term}: {ex}")
+                        return list(dedup_map.values())
+
+                try:
+                    all_found_jobs = run_async(do_search_all_fast())
+                except Exception as ex:
+                    st.error(f"Error al realizar la búsqueda: {ex}")
+
+            search_status.empty()
+
+            if not all_found_jobs:
+                st.warning(f"No se encontraron ofertas nuevas sin postular en {target_loc} para las categorías seleccionadas.")
+            else:
+                st.session_state["raw_found_jobs"] = all_found_jobs
+                
+                # Gemini Evaluation & Extract Generation
+                eval_list = []
+                p_bar = st.progress(0)
+                eval_lbl = st.empty()
+                
+                for i_j, raw_j in enumerate(all_found_jobs):
+                    eval_lbl.text(f"Evaluando oferta {i_j+1}/{len(all_found_jobs)}: {raw_j['title']}...")
+                    eval_res = evaluate_job_with_gemini(effective_key, cv_text, raw_j, sector=raw_j.get("sector", ""))
+                    job_eval = {
+                        **raw_j,
+                        "score": eval_res.get("score", 50),
+                        "reasoning": eval_res.get("reasoning", ""),
+                        "company_extract": eval_res.get("company_extract", ""),
+                        "killer_answers": eval_res.get("killer_answers", []),
+                        "selected": eval_res.get("score", 0) >= 75
+                    }
+                    eval_list.append(job_eval)
+
+                    # Auto-dispatch Telegram alert if score >= 85 and Telegram configured
+                    if job_eval["score"] >= 85 and telegram_token_input and telegram_chat_id_input:
+                        try:
+                            run_async(send_telegram_notification(telegram_token_input, telegram_chat_id_input, job_eval))
+                        except Exception:
+                            pass
+
+                    p_bar.progress((i_j + 1) / len(all_found_jobs))
+                
+                eval_lbl.empty()
+                st.session_state["evaluated_jobs"] = eval_list
+                st.success(f"🎉 ¡Se encontraron y evaluaron {len(eval_list)} ofertas multirubro! Revisa el panel de decisión abajo.")
+
+    st.divider()
+
+    # STEP 3: DIRECT DECISION PANEL (ONLY QUALIFIED JOBS MATCH >= 75%)
+    if "evaluated_jobs" in st.session_state and st.session_state["evaluated_jobs"]:
+        st.markdown("### 3️⃣ Tarjetas de Oferta con Decisión y Envío en 1 Clic (Score ≥ 75%)")
+        
+        all_eval = st.session_state["evaluated_jobs"]
+        # Strict Filter: only show score >= 75 and not discarded
+        qualified_jobs = [j for j in all_eval if j.get("score", 0) >= 75 and j.get("status") not in ["descartada", "discarded"]]
+        hidden_count = sum(1 for j in all_eval if j.get("score", 0) < 75)
+        
+        if hidden_count > 0:
+            st.info(f"🛡️ **Filtro Estricto Activo:** Se han ocultado automáticamente **{hidden_count} ofertas** por tener una coincidencia inferior al 75%.")
+
+        if not qualified_jobs:
+            st.warning("🎉 No hay más vacantes aptas pendientes de revisión. ¡Has tomado decisión sobre todas las ofertas encontradas!")
+        else:
+            for idx, job in enumerate(qualified_jobs):
+                score = job.get("score", 75)
+                job_id = job.get("id", f"job_{idx}")
+                sec_lbl = job.get("sector", "General")
+                
+                # Platform Badge
+                plat_str = job.get("platform", "InfoJobs")
+                if "InfoJobs" in plat_str and "Indeed" in plat_str:
+                    plat_badge = '<span style="background-color: #0284C7; color: #FFFFFF; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">🌐 InfoJobs + Indeed</span>'
+                elif "Jooble" in plat_str:
+                    plat_badge = '<span style="background-color: #9333EA; color: #FFFFFF; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">🟣 Jooble</span>'
+                elif "Indeed" in plat_str:
+                    plat_badge = '<span style="background-color: #2563EB; color: #FFFFFF; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">🔵 Indeed</span>'
+                else:
+                    plat_badge = '<span style="background-color: #059669; color: #FFFFFF; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">🟢 InfoJobs</span>'
+
+                if "Logística" in sec_lbl or "Hostelería" in sec_lbl:
+                    sec_badge = '<span style="background-color: #FEF3C7; color: #92400E; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">📦 Hostelería / Logística</span>'
+                elif "Administración" in sec_lbl or "ADE" in sec_lbl:
+                    sec_badge = '<span style="background-color: #E0E7FF; color: #3730A3; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">📊 Administración / ADE</span>'
+                elif "Tech" in sec_lbl or "IA" in sec_lbl:
+                    sec_badge = '<span style="background-color: #ECE9FE; color: #5B21B6; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">💻 Tech / IA</span>'
+                else:
+                    sec_badge = '<span style="background-color: #F1F5F9; color: #334155; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.82rem;">🏢 Puesto General</span>'
+
+                with st.container():
+                    c_det, c_cond, c_act = st.columns([3.3, 4.2, 2.5])
+                    
+                    # COLUMNA 1: Título, Empresa, Ubicación y Etiqueta de Origen + Sector
+                    with c_det:
+                        st.markdown(f"#### [{job['title']}]({job['link']})")
+                        st.markdown(f"🏢 **{job['company']}**")
+                        st.markdown(f"📍 **{job.get('location', 'Alicante')}**")
+                        st.markdown(f"{plat_badge} &nbsp; {sec_badge} &nbsp; <span class='score-badge-high'>🎯 {score}% Coincidencia</span>", unsafe_allow_html=True)
+                    
+                    # COLUMNA 2: Condiciones y Respuestas Killer
+                    with c_cond:
+                        sal_str = job.get("salary", "")
+                        if sal_str and "no disponible" not in sal_str.lower() and "no especificado" not in sal_str.lower():
+                            st.markdown(f"💰 **Salario:** `{sal_str}`")
+                        else:
+                            st.markdown("⚠️ **Salario no especificado**")
+                            
+                        mod_str = job.get("modality", "Presencial / Jornada completa")
+                        st.markdown(f"💼 **Condiciones:** {mod_str}")
+                        
+                        if job.get("company_extract"):
+                            st.markdown(f"📝 **Extracto:** {job['company_extract']}")
+                            
+                        if job.get("killer_answers"):
+                            with st.expander(f"❓ Respuestas Killer adaptadas ({len(job['killer_answers'])})"):
+                                for ka in job["killer_answers"]:
+                                    st.caption(f"**P:** {ka.get('question')}")
+                                    st.write(f"**R:** {ka.get('answer')}")
+
+                    # COLUMNA 3: Acciones Directas (Aceptar y Postular / Descartar / Generar Carta)
+                    with c_act:
+                        st.write("")
+                        is_applied = job.get("status") in ["applied", "success", "already_applied", "already_applied_on_site", "Postulado"]
+                        
+                        if is_applied:
+                            st.button("✅ Postulado", disabled=True, key=f"btn_done_{job_id}_{idx}", use_container_width=True)
+                        else:
+                            if st.button("✅ Aceptar y Postular", type="primary", key=f"btn_apply_{job_id}_{idx}", use_container_width=True):
+                                effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+                                with st.spinner(f"Enviando postulación a {job['company']}..."):
+                                    async def do_apply_single():
+                                        async with async_playwright() as p:
+                                            return await apply_to_job(
+                                                playwright=p,
+                                                job_url=job["link"],
+                                                killer_answers=job.get("killer_answers", []),
+                                                headless=headless_option
+                                            )
+                                    try:
+                                        res = run_async(do_apply_single())
+                                        job["status"] = "applied"
+                                        database.record_application(
+                                            job_id=job["id"],
+                                            title=job["title"],
+                                            company=job["company"],
+                                            link=job["link"],
+                                            score=job.get("score", 100),
+                                            status="applied",
+                                            salary=job.get("salary", ""),
+                                            location=job.get("location", ""),
+                                            modality=job.get("modality", ""),
+                                            sector=job.get("sector", ""),
+                                            platform=job.get("platform", "InfoJobs"),
+                                            killer_answers=job.get("killer_answers", [])
+                                        )
+                                        st.toast(f"✅ ¡Inscripción completada con éxito en {job['company']}!")
+                                        st.rerun()
+                                    except Exception as ae:
+                                        st.error(f"Error al postular a {job['company']}: {ae}")
+
+                            if st.button("❌ Descartar", key=f"btn_discard_{job_id}_{idx}", use_container_width=True):
+                                job["status"] = "descartada"
+                                database.discard_job(
+                                    job_id=job["id"],
+                                    title=job["title"],
+                                    company=job["company"],
+                                    link=job["link"],
+                                    score=job.get("score", 0),
+                                    salary=job.get("salary", ""),
+                                    location=job.get("location", ""),
+                                    modality=job.get("modality", ""),
+                                    sector=job.get("sector", ""),
+                                    platform=job.get("platform", "InfoJobs")
+                                )
+                                st.toast(f"🗑️ Oferta de {job['company']} descartada.")
+                                st.rerun()
+
+                        if st.button("📄 Carta de Presentación", key=f"btn_letter_{job_id}_{idx}", use_container_width=True):
+                            effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+                            if not effective_key:
+                                st.error("Introduce tu Gemini API Key en la barra lateral.")
+                            else:
+                                with st.spinner("Gemini está redactando tu carta de presentación adaptada..."):
+                                    cv_txt = st.session_state.get("cv_text", "")
+                                    letter = generate_cover_letter_with_gemini(effective_key, cv_txt, job)
+                                    st.session_state[f"cover_letter_{job_id}"] = letter
+                                    st.toast("✅ ¡Carta redactada con éxito!")
+
+                if f"cover_letter_{job_id}" in st.session_state:
+                    with st.expander(f"📝 Carta de Presentación para {job['company']}", expanded=True):
+                        st.text_area("Texto listo para copiar:", value=st.session_state[f"cover_letter_{job_id}"], height=200, key=f"txt_cover_{job_id}")
+
+                st.divider()
+
+
+# ==============================================================================
+# TAB 2: DEDICATED CONVERSATIONAL CHAT WITH ORIOL
+# ==============================================================================
+with tab_chat:
+    st.subheader("💬 Chat Inteligente con Oriol (Tu Asesor Personal)")
+    st.markdown("Conversa con **Oriol** para hacerle preguntas sobre tu CV, preparar entrevistas de trabajo, consultar dudas sobre las ofertas o pulir tu búsqueda de empleo.")
+    
+    if "chat_messages" not in st.session_state:
+        st.session_state["chat_messages"] = [
+            {
+                "role": "assistant",
+                "content": "¡Hola! 👋 Soy Oriol, tu asesor personal de empleo. He analizado tu perfil y las herramientas de búsqueda. ¿En qué te puedo orientar hoy? Puedes preguntarme sobre qué destacar en tus entrevistas, salarios, o resolver cualquier duda sobre tus candidaturas."
+            }
+        ]
+        
+    c_head1, c_head2 = st.columns([4, 1])
+    with c_head2:
+        if st.button("🧹 Limpiar Chat", use_container_width=True, key="btn_clear_chat"):
+            st.session_state["chat_messages"] = [
+                {
+                    "role": "assistant",
+                    "content": "¡Hola de nuevo! 👋 Chat reiniciado. ¿En qué te ayudo ahora?"
+                }
+            ]
+            st.rerun()
+            
+    # Display chat history
+    for msg in st.session_state["chat_messages"]:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+            
+    # Chat user input
+    if user_prompt := st.chat_input("Escribe tu mensaje o pregunta para Oriol..."):
+        st.session_state["chat_messages"].append({"role": "user", "content": user_prompt})
+        with st.chat_message("user"):
+            st.markdown(user_prompt)
+            
+        effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+        with st.chat_message("assistant"):
+            if not effective_key:
+                st.warning("⚠️ Introduce tu clave Gemini API Key en la barra lateral (menú de la izquierda) para chatear con Oriol.")
+                assistant_reply = "Por favor, introduce tu clave Gemini API en el menú lateral de la izquierda (obtenla gratis en [Google AI Studio](https://aistudio.google.com/app/apikey)) para que pueda responderte."
+            else:
+                with st.spinner("Oriol está pensando..."):
+                    current_cv = st.session_state.get("cv_text", "")
+                    current_eval_jobs = st.session_state.get("evaluated_jobs", None)
+                    assistant_reply = chat_with_assistant(
+                        api_key=effective_key,
+                        chat_history=st.session_state["chat_messages"],
+                        cv_text=current_cv,
+                        evaluated_jobs=current_eval_jobs
+                    )
+            st.markdown(assistant_reply)
+            st.session_state["chat_messages"].append({"role": "assistant", "content": assistant_reply})
+
+
+# ==============================================================================
+# TAB 3: DIRECT URL APPLICATION
+# ==============================================================================
+with tab_direct:
+    st.subheader("⚡ Postulación Directa por URL")
+    st.markdown("Pega el enlace de cualquier oferta de InfoJobs para postularte de forma inmediata:")
+    
+    direct_url = st.text_input("URL de la oferta de InfoJobs", placeholder="https://www.infojobs.net/...")
+    
+    st.write("Pregunta y Respuesta personalizada (opcional):")
+    q_custom = st.text_input("Pregunta (opcional)", key="custom_q")
+    a_custom = st.text_input("Respuesta (opcional)", key="custom_a")
+    
+    if st.button("✨ Inscribirme Directamente", type="primary", key="btn_direct_apply"):
+        if not direct_url:
+            st.warning("Introduce una URL válida de InfoJobs.")
+        else:
+            k_answers = [{"question": q_custom, "answer": a_custom}] if q_custom and a_custom else []
+            with st.spinner("Inscribiendo en la oferta..."):
+                async def do_direct_apply():
+                    async with async_playwright() as p:
+                        return await apply_to_job(
+                            playwright=p,
+                            job_url=direct_url,
+                            killer_answers=k_answers,
+                            headless=headless_option
+                        )
+                try:
+                    res = run_async(do_direct_apply())
+                    if res.get("status") in ["success", "already_applied"]:
+                        st.success(f"✅ {res.get('message')}")
+                    else:
+                        st.warning(f"⚠️ {res.get('message')}")
+                except Exception as e:
+                    st.error(f"Error en la postulación: {e}")
+
+
+# ==============================================================================
+# TAB 4: APPLICATION HISTORY DATABASE (jobs.db)
+# ==============================================================================
+with tab_history:
+    st.subheader("📊 Historial de Postulaciones (jobs.db)")
+    
+    if st.button("🔄 Actualizar Tabla", key="btn_refresh_db"):
+        st.rerun()
+
+    apps = database.get_all_applications(limit=100)
+    if apps:
+        df = pd.DataFrame(apps)
+        st.dataframe(df, use_container_width=True)
+        
+        csv_data = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="📥 Descargar Historial CSV",
+            data=csv_data,
+            file_name="historial_infojobs.csv",
+            mime="text/csv",
+            key="btn_csv_download"
+        )
+    else:
+        st.info("Aún no hay postulaciones registradas en la base de datos `jobs.db`.")
+
+
+# ==============================================================================
+# TAB 5: ANALYTICS & FUNNEL DASHBOARD
+# ==============================================================================
+with tab_analytics:
+    st.subheader("📈 Analítica & Funnel de Candidaturas")
+    st.markdown("Visualiza el rendimiento de tus búsquedas, distribución por sectores y portales de empleo:")
+    
+    if st.button("🔄 Recalcular Métricas", key="btn_refresh_analytics"):
+        st.rerun()
+
+    apps = database.get_all_applications(limit=1000)
+    if not apps:
+        st.info("Aún no hay suficientes candidaturas registradas para mostrar analíticas. ¡Realiza tu primera búsqueda en el Tab 1!")
+    else:
+        df_apps = pd.DataFrame(apps)
+        
+        total_count = len(df_apps)
+        applied_count = len(df_apps[df_apps["status"].isin(["applied", "success", "already_applied", "already_applied_on_site", "Postulado"])])
+        discarded_count = len(df_apps[df_apps["status"].isin(["descartada", "discarded"])])
+        avg_score = round(df_apps["score"].mean() if "score" in df_apps else 0, 1)
+
+        # KPI Metrics Cards
+        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        with kpi1:
+            st.metric("📌 Total Procesadas", total_count)
+        with kpi2:
+            st.metric("✅ Postuladas", applied_count, delta=f"{round((applied_count/max(total_count, 1))*100)}%")
+        with kpi3:
+            st.metric("🗑️ Descartadas", discarded_count)
+        with kpi4:
+            st.metric("🎯 Coincidencia Media", f"{avg_score}%")
+
+        st.divider()
+
+        a_col1, a_col2 = st.columns(2)
+        with a_col1:
+            st.markdown("#### 📦 Distribución por Sector")
+            if "sector" in df_apps and not df_apps["sector"].isna().all():
+                sector_df = df_apps["sector"].fillna("General").value_counts().reset_index()
+                sector_df.columns = ["Sector", "Cantidad"]
+                st.bar_chart(sector_df.set_index("Sector"))
+            else:
+                st.caption("No hay datos de sector disponibles.")
+
+        with a_col2:
+            st.markdown("#### 🏷️ Distribución por Plataforma")
+            if "platform" in df_apps and not df_apps["platform"].isna().all():
+                plat_df = df_apps["platform"].fillna("InfoJobs").value_counts().reset_index()
+                plat_df.columns = ["Plataforma", "Cantidad"]
+                st.bar_chart(plat_df.set_index("Plataforma"))
+            else:
+                st.caption("No hay datos de plataforma disponibles.")
+
+        st.markdown("#### 🎯 Distribución de Puntuaciones (% Score)")
+        if "score" in df_apps:
+            st.bar_chart(df_apps["score"].value_counts().sort_index())

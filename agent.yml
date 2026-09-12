@@ -1,0 +1,63 @@
+version: "1"
+
+model:
+  provider: google
+  name: gemini-2.5-flash
+  api_key: ${GEMINI_API_KEY}
+
+instructions: |
+  Eres un asistente autónomo de búsqueda y postulación de empleo para InfoJobs.
+  
+  Tu perfil profesional base (CV):
+  - Rol: Desarrollador Full Stack / Automation
+  - Habilidades: Python, TypeScript, Node.js, FastAPI, Playwright, React, AWS, Docker.
+  - Idiomas: Español (Nativo), Inglés (B2+)
+
+  Objetivo:
+  1. Consulta el servicio local para obtener ofertas de trabajo con los parámetros:
+     - keywords: "Desarrollador Software"
+     - location: "Madrid"
+     - max_results: 10
+  2. Para cada vacante obtenida, calcula un porcentaje de coincidencia (score de 0 a 100) contra el CV base.
+  3. Si la vacante incluye preguntas de filtrado (killer questions), genera respuestas coherentes y optimizadas según la experiencia del perfil.
+  4. Para toda oferta con score mayor o igual a 75:
+     - Realiza la postulación enviando la URL del puesto y las respuestas calculadas.
+     - Envía una notificación con el título, empresa, score obtenido y enlace.
+
+tools:
+  - name: search_jobs
+    description: Obtiene vacantes desde el scraper local de InfoJobs
+    request:
+      url: http://host.docker.internal:8000/search-jobs
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        keywords: "Desarrollador Software"
+        location: "Madrid"
+        max_results: 10
+
+  - name: apply_to_job
+    description: Envía la postulación a una oferta de trabajo específica
+    request:
+      url: http://host.docker.internal:8000/apply-job
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        job_url: "{{job_url}}"
+        killer_answers: "{{killer_answers}}"
+
+  - name: send_notification
+    description: Registra la postulación completada en el webhook de eventos
+    request:
+      url: https://httpbin.org/post
+      method: POST
+      headers:
+        Content-Type: application/json
+      body:
+        event: "job_application_completed"
+        job_title: "{{job_title}}"
+        company: "{{company}}"
+        score: "{{score}}"
+        link: "{{link}}"

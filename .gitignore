@@ -1,0 +1,42 @@
+# Virtual environment
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache & build
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Secrets & Environment Variables
+.env
+.env.*
+!.env.example
+user_data/
+
+# Databases & Session storage
+*.db
+*.sqlite
+*.sqlite3
+applications.db
+storageState.json
+
+# Node & Mobile build outputs
+node_modules/
+mobile/node_modules/
+.expo/
+mobile/.expo/
+dist/
+web-build/
+
+# Logs & Temp files
+*.log
+scratch/
+.system_generated/
+.DS_Store
+Thumbs.db
