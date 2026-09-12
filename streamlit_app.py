@@ -701,9 +701,26 @@ else:
 st.sidebar.divider()
 headless_option = st.sidebar.checkbox("Modo Oculto (Headless)", value=False)
 
-# Main App Header
-st.markdown('<div class="main-header">🤖 Agente Autónomo Multi-Portal (InfoJobs + Indeed + Jooble)</div>', unsafe_allow_html=True)
-st.markdown('<div class="sub-header">Búsqueda concurrente en InfoJobs, Indeed y Jooble, cartas de presentación personalizadas, alertas Telegram y analítica</div>', unsafe_allow_html=True)
+# Main App Smartphone Top Bar Header
+st.markdown("""
+<div class="app-top-bar">
+    <div class="app-title-box">
+        <span style="font-size: 1.6rem;">📱</span>
+        <div>
+            <div class="app-title-text">CV Auto App</div>
+            <div style="font-size: 0.78rem; color: #94A3B8; font-weight: 600;">InfoJobs • Indeed • Jooble • Gemini 1.5 Pro</div>
+        </div>
+    </div>
+    <div style="display: flex; gap: 8px; align-items: center;">
+        <span style="background: rgba(16, 185, 129, 0.15); color: #34D399; font-size: 0.78rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(52, 211, 153, 0.3);">
+            🟢 Online 24/7
+        </span>
+    </div>
+</div>
+
+<div class="main-header">🤖 Agente Autónomo Multi-Portal</div>
+<div class="sub-header">Búsqueda concurrente de empleo, clasificación multirubro, cartas de presentación y envío automático con IA</div>
+""", unsafe_allow_html=True)
 
 # Main Navigation Tabs
 tab_workflow, tab_chat, tab_direct, tab_history, tab_analytics = st.tabs([
