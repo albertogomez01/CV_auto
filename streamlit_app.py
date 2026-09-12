@@ -38,39 +38,78 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Premium Modern CSS Styling
+# Premium Modern CSS & Mobile Responsiveness Styling
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    
+    /* Prevent iOS Safari automatic zooming on inputs */
+    input, select, textarea {
+        font-size: 16px !important;
     }
     
     .main-header {
-        font-size: 2.3rem;
+        font-size: 2.2rem;
         font-weight: 800;
         background: linear-gradient(90deg, #2563EB, #06B6D4);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.2rem;
+        margin-bottom: 0.3rem;
+        line-height: 1.25;
     }
     
     .sub-header {
         color: #475569;
         font-size: 1.05rem;
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
+        line-height: 1.4;
     }
     
+    /* Touch-friendly buttons (min-height 48px for WCAG tap targets) */
+    .stButton>button {
+        border-radius: 12px !important;
+        font-weight: 600 !important;
+        min-height: 48px !important;
+        font-size: 0.96rem !important;
+        transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .stButton>button:active {
+        transform: scale(0.98);
+    }
+    
+    /* Mobile Touch Tabs */
+    div[data-baseweb="tab-list"] {
+        gap: 6px !important;
+        overflow-x: auto !important;
+        white-space: nowrap !important;
+        -webkit-overflow-scrolling: touch !important;
+        padding-bottom: 6px !important;
+    }
+    div[data-baseweb="tab"] {
+        padding: 10px 16px !important;
+        font-size: 0.95rem !important;
+        font-weight: 600 !important;
+        border-radius: 10px !important;
+    }
+    
+    /* Badges & Indicators */
     .score-badge-high {
         background-color: #DCFCE7;
         color: #166534;
         padding: 5px 12px;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 0.9rem;
+        font-size: 0.88rem;
         border: 1px solid #BBF7D0;
         display: inline-block;
+        margin: 2px 4px 2px 0;
     }
     
     .score-badge-mid {
@@ -79,9 +118,10 @@ st.markdown("""
         padding: 5px 12px;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 0.9rem;
+        font-size: 0.88rem;
         border: 1px solid #FEF08A;
         display: inline-block;
+        margin: 2px 4px 2px 0;
     }
     
     .score-badge-low {
@@ -90,9 +130,10 @@ st.markdown("""
         padding: 5px 12px;
         border-radius: 20px;
         font-weight: 700;
-        font-size: 0.9rem;
+        font-size: 0.88rem;
         border: 1px solid #FECACA;
         display: inline-block;
+        margin: 2px 4px 2px 0;
     }
     
     .cap-badge {
@@ -101,15 +142,43 @@ st.markdown("""
         padding: 6px 14px;
         border-radius: 8px;
         font-weight: 600;
-        font-size: 0.92rem;
+        font-size: 0.9rem;
         border: 1px solid #CBD5E1;
         display: inline-block;
         margin: 4px;
     }
     
-    .stButton>button {
-        border-radius: 8px;
-        font-weight: 600;
+    /* Mobile-specific responsive adaptations */
+    @media (max-width: 768px) {
+        .main-header {
+            font-size: 1.55rem !important;
+        }
+        .sub-header {
+            font-size: 0.9rem !important;
+            margin-bottom: 1rem !important;
+        }
+        .block-container {
+            padding-left: 0.6rem !important;
+            padding-right: 0.6rem !important;
+            padding-top: 0.8rem !important;
+        }
+        /* Automatically stack columns vertically on mobile screens */
+        div[data-testid="column"] {
+            width: 100% !important;
+            flex: 1 1 100% !important;
+            min-width: 100% !important;
+            margin-bottom: 0.5rem !important;
+        }
+        /* Mobile tap buttons full-width */
+        .stButton>button {
+            width: 100% !important;
+            min-height: 48px !important;
+            font-size: 0.95rem !important;
+        }
+        div[data-baseweb="tab"] {
+            padding: 8px 12px !important;
+            font-size: 0.85rem !important;
+        }
     }
 </style>
 """, unsafe_allow_html=True)
@@ -577,11 +646,11 @@ st.markdown('<div class="sub-header">Búsqueda concurrente en InfoJobs, Indeed y
 
 # Main Navigation Tabs
 tab_workflow, tab_chat, tab_direct, tab_history, tab_analytics = st.tabs([
-    "🚀 Agente Autónomo (Filtros & Postulación)",
-    "💬 Chat con Oriol (Asesor Personal)",
-    "⚡ Postulación Directa por URL", 
-    "📊 Historial (jobs.db)",
-    "📈 Analítica & Funnel"
+    "🚀 Agente",
+    "💬 Chat Oriol",
+    "⚡ Postular URL", 
+    "📊 Historial",
+    "📈 Analítica"
 ])
 
 # ==============================================================================
@@ -651,16 +720,14 @@ Experiencia y Capacidades:
             st.caption(skills_by_area.get("tecnologia_ia", "Python, APIs REST, automatización con IA."))
         st.write("")
 
-    # Sector Multiselect Filter Options
-    st.markdown("**🎯 Selecciona las Ramas de Empleo a Consultar en esta Búsqueda:**")
-    sec_c1, sec_c2, sec_c3, sec_c4 = st.columns(4)
+    # Sector Multiselect Filter Options (Responsive 2x2 grid)
+    st.markdown("**🎯 Selecciona las Ramas de Empleo a Consultar:**")
+    sec_c1, sec_c2 = st.columns(2)
     with sec_c1:
         sel_all = st.checkbox("🌐 Todos los sectores", value=True)
-    with sec_c2:
         sel_log = st.checkbox("📦 Hostelería, Reposición y Logística", value=True)
-    with sec_c3:
+    with sec_c2:
         sel_adm = st.checkbox("📊 Administración y ADE", value=True)
-    with sec_c4:
         sel_tech = st.checkbox("💻 Programación & IA", value=True)
 
     # Gather selected sector keywords
@@ -972,13 +1039,31 @@ with tab_chat:
             ]
             st.rerun()
             
+    # Quick Tap suggestion chips for mobile users
+    st.markdown("**💡 Sugerencias rápidas (1 tap):**")
+    chip_col1, chip_col2, chip_col3 = st.columns(3)
+    preset_prompt = None
+    with chip_col1:
+        if st.button("🎯 ¿Qué puestos me convienen?", key="chip_1", use_container_width=True):
+            preset_prompt = "¿Qué puestos de empleo encajan mejor con mi experiencia y formación según mi CV?"
+    with chip_col2:
+        if st.button("💬 Consejos para entrevista", key="chip_2", use_container_width=True):
+            preset_prompt = "¿Qué consejos clave me das para superar con éxito una entrevista en mis sectores de interés?"
+    with chip_col3:
+        if st.button("📊 Resumen de vacantes", key="chip_3", use_container_width=True):
+            preset_prompt = "¿Puedes darme un resumen de las vacantes encontradas y mis principales fortalezas?"
+
     # Display chat history
     for msg in st.session_state["chat_messages"]:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
             
-    # Chat user input
-    if user_prompt := st.chat_input("Escribe tu mensaje o pregunta para Oriol..."):
+    # Chat user input or quick chip prompt
+    user_prompt = st.chat_input("Escribe tu mensaje o pregunta para Oriol...")
+    if preset_prompt:
+        user_prompt = preset_prompt
+        
+    if user_prompt:
         st.session_state["chat_messages"].append({"role": "user", "content": user_prompt})
         with st.chat_message("user"):
             st.markdown(user_prompt)
@@ -1086,12 +1171,14 @@ with tab_analytics:
         discarded_count = len(df_apps[df_apps["status"].isin(["descartada", "discarded"])])
         avg_score = round(df_apps["score"].mean() if "score" in df_apps else 0, 1)
 
-        # KPI Metrics Cards
-        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+        # KPI Metrics Cards (Responsive 2x2 layout for mobile)
+        kpi1, kpi2 = st.columns(2)
         with kpi1:
             st.metric("📌 Total Procesadas", total_count)
         with kpi2:
             st.metric("✅ Postuladas", applied_count, delta=f"{round((applied_count/max(total_count, 1))*100)}%")
+            
+        kpi3, kpi4 = st.columns(2)
         with kpi3:
             st.metric("🗑️ Descartadas", discarded_count)
         with kpi4:
