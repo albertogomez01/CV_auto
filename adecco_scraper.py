@@ -66,7 +66,8 @@ async def search_adecco(
             print(f"[Adecco Scraper] Aviso al navegar: {ne}")
 
         if captured_jobs:
-            for item in captured_jobs[:max_results * 2]:
+            target_loc_clean = location.strip().lower() if location else ""
+            for item in captured_jobs[:max_results * 3]:
                 raw_id = item.get("jobId", "")
                 link_rel = item.get("jobDetailsUrl") or f"/es-es/ofertas-trabajo/{raw_id}"
                 link = link_rel if link_rel.startswith("http") else f"https://www.adecco.com{link_rel}"
@@ -74,13 +75,22 @@ async def search_adecco(
                 job_id = extract_adecco_id(link, raw_id)
                 title = item.get("jobTitle") or "Vacante en Adecco"
                 company = item.get("brandName") or "Adecco España"
-                city = item.get("city") or location or "España"
+                
+                # Extraer la ubicación real de la vacante enviada por Adecco (ej. 'Valladolid, Valladolid', 'Alicante', etc.)
+                real_city = item.get("jobLocation") or item.get("cityName") or item.get("workLocationTitle") or item.get("stateName") or item.get("city") or "España"
+                
+                is_remote = item.get("isRemote", False) or ("remoto" in title.lower()) or ("teletrabajo" in title.lower())
+                
+                # Filtrar si el usuario especificó una ubicación y la oferta no es remota ni coincide con la ciudad buscada
+                if target_loc_clean and not is_remote:
+                    if target_loc_clean not in real_city.lower():
+                        continue
 
                 if is_job_processed(job_id=job_id, link=link, title=title, company=company):
                     continue
 
                 salary = item.get("salaryRange") or item.get("contractTypeTitle") or "Según convenio / No especificado"
-                modality = "En remoto" if ("remoto" in title.lower() or "teletrabajo" in title.lower()) else "Presencial"
+                modality = "En remoto" if is_remote else "Presencial"
 
                 jobs.append({
                     "id": job_id,
@@ -88,10 +98,10 @@ async def search_adecco(
                     "company": company,
                     "link": link,
                     "salary": salary,
-                    "location": city,
+                    "location": real_city,
                     "modality": modality,
                     "platform": "Adecco",
-                    "description": f"Vacante de empleo en Adecco: {title} en {city}.",
+                    "description": f"Vacante de empleo en Adecco: {title} en {real_city}.",
                     "killer_questions": []
                 })
 
