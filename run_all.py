@@ -78,12 +78,12 @@ def main():
         PYTHON_BIN, "-m", "streamlit", "run", "streamlit_app.py",
         "--server.port", str(port),
         "--server.address", "0.0.0.0",
-        "--server.headless", "true"
+        "--server.headless", "true",
+        "--server.enableCORS", "false",
+        "--server.enableXsrfProtection", "false"
     ]
     p_streamlit = subprocess.Popen(
-        st_cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT
+        st_cmd
     )
     processes.append((p_streamlit, "Dashboard Streamlit"))
     print(f"✅ Dashboard Streamlit listo y escuchando en puerto {port}")
@@ -129,7 +129,7 @@ def main():
                     if name == "FastAPI Backend":
                         new_p = subprocess.Popen([PYTHON_BIN, "main.py"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
                     elif name == "Dashboard Streamlit":
-                        new_p = subprocess.Popen(st_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                        new_p = subprocess.Popen(st_cmd)
                     elif name == "Bot de Telegram":
                         new_p = subprocess.Popen([PYTHON_BIN, "bot.py"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, env=bot_env)
                     processes.remove((p, name))
