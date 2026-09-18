@@ -4,6 +4,7 @@ import json
 import asyncio
 import re
 import io
+import threading
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
@@ -312,6 +313,33 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
         print(f"[CV Upload Handler] Error: {e}")
         await update.message.reply_text(f"❌ Error al procesar el archivo: {str(e)}", parse_mode="HTML")
 
+# --- HEALTH CHECK WEB SERVER FOR CLOUD HOSTING (RENDER / RAILWAY) ---
+
+def start_health_server():
+    port_str = os.getenv("PORT", "").strip()
+    if not port_str:
+        return
+    try:
+        port = int(port_str)
+        import uvicorn
+        from fastapi import FastAPI
+
+        health_app = FastAPI()
+
+        @health_app.get("/")
+        @health_app.get("/health")
+        def health_check():
+            return {"status": "ok", "bot": "CV_auto Telegram Bot"}
+
+        def _run():
+            print(f"🌐 Servidor Web de Health Check activo en puerto {port}")
+            uvicorn.run(health_app, host="0.0.0.0", port=port, log_level="warning")
+
+        t = threading.Thread(target=_run, daemon=True)
+        t.start()
+    except Exception as e:
+        print(f"[Health Server Warning] No se pudo iniciar el servidor web: {e}")
+
 # --- EXECUTION ENTRYPOINT ---
 
 def main():
@@ -322,6 +350,9 @@ def main():
 
     print("🚀 Iniciando Bot Multiusuario de Telegram para Búsqueda de Empleo...")
     print(f"• Token Bot: {token[:8]}...{token[-4:]}")
+
+    # Iniciar servidor de Health Check si Render asigna la variable PORT
+    start_health_server()
 
     # Inicializar Base de Datos SQLite Multiusuario
     database.init_db()
