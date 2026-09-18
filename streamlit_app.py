@@ -604,43 +604,44 @@ CONTEXTO DE LA SESIÓN:
 
 # Sidebar Setup
 st.sidebar.image("https://www.infojobs.net/ij-static/ij-core/images/infojobs-logo.svg", width=180)
-st.sidebar.title("⚙️ Configuración")
+st.sidebar.title("⚡ Panel CV_auto")
 
-api_key_input = st.sidebar.text_input("🔑 Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
+st.sidebar.markdown("### 🟢 Estado del Servicio")
+st.sidebar.success("✅ **IA Gemini:** Preparada")
+st.sidebar.info("📱 **Bot Telegram:** Conectado 24/7")
 
-session_exists = os.path.exists("storageState.json")
-if session_exists:
-    st.sidebar.success("✅ Sesión InfoJobs Activa (`storageState.json`)")
-else:
-    st.sidebar.warning("⚠️ No hay sesión guardada.")
-
-if st.sidebar.button("🔑 Iniciar Sesión Manual en InfoJobs", use_container_width=True):
-    st.info("Se abrirá Chromium en modo visible. Inicia sesión en InfoJobs y presiona ENTER en la consola...")
-    try:
-        run_async(run_login_setup())
-        st.success("¡Sesión guardada correctamente!")
-        st.rerun()
-    except Exception as e:
-        st.error(f"Error al iniciar sesión: {e}")
-
-st.sidebar.divider()
-st.sidebar.markdown("### ✈️ Alertas de Telegram (Opcional)")
-telegram_token_input = st.sidebar.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", ""), type="password")
-telegram_chat_id_input = st.sidebar.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", ""))
-
-if st.sidebar.button("📡 Probación Notificación Telegram", use_container_width=True):
-    if not telegram_token_input or not telegram_chat_id_input:
-        st.sidebar.error("Introduce tu Token y Chat ID arriba.")
+with st.sidebar.expander("🛠️ Ajustes Avanzados & Credenciales", expanded=False):
+    api_key_input = st.text_input("🔑 Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
+    telegram_token_input = st.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", ""), type="password")
+    telegram_chat_id_input = st.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", ""))
+    
+    session_exists = os.path.exists("storageState.json")
+    if session_exists:
+        st.success("✅ Sesión InfoJobs Activa")
     else:
-        with st.spinner("Enviando mensaje de prueba..."):
-            res = run_async(test_telegram_connection(telegram_token_input, telegram_chat_id_input))
-            if res.get("status") == "success":
-                st.sidebar.success("✅ ¡Notificación de prueba enviada a Telegram!")
-            else:
-                st.sidebar.error(f"❌ {res.get('message')}")
+        st.caption("ℹ️ Sin sesión guardada de InfoJobs")
+    
+    if st.button("🔑 Iniciar Sesión Manual en InfoJobs", use_container_width=True):
+        st.info("Se abrirá Chromium para iniciar sesión...")
+        try:
+            run_async(run_login_setup())
+            st.success("¡Sesión guardada correctamente!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error al iniciar sesión: {e}")
 
-st.sidebar.divider()
-st.sidebar.markdown("### 🤖 Piloto Automático (Segundo Plano)")
+    if st.button("📡 Probación Notificación Telegram", use_container_width=True):
+        eff_token = telegram_token_input.strip() if telegram_token_input else os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        eff_chat = telegram_chat_id_input.strip() if telegram_chat_id_input else os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        if not eff_token or not eff_chat:
+            st.error("Introduce tu Token y Chat ID arriba.")
+        else:
+            with st.spinner("Enviando mensaje de prueba..."):
+                res = run_async(test_telegram_connection(eff_token, eff_chat))
+                if res.get("status") == "success":
+                    st.success("✅ ¡Notificación de prueba enviada a Telegram!")
+                else:
+                    st.error(f"❌ {res.get('message')}")
 
 def get_backend_scheduler_status():
     try:
@@ -655,54 +656,47 @@ sched_state = get_backend_scheduler_status()
 is_active_current = sched_state.get("is_active", False)
 interval_current = sched_state.get("interval_minutes", 30)
 
-autopilot_active = st.sidebar.toggle("⚡ Activar Piloto Automático", value=is_active_current)
-autopilot_interval = st.sidebar.select_slider(
-    "⏱️ Intervalo de ejecución (minutos)",
-    options=[5, 15, 30, 60, 120, 240, 720],
-    value=interval_current if interval_current in [5, 15, 30, 60, 120, 240, 720] else 30
-)
+with st.sidebar.expander("🤖 Piloto Automático (Programador)", expanded=False):
+    autopilot_active = st.toggle("⚡ Activar Piloto Automático", value=is_active_current)
+    autopilot_interval = st.select_slider(
+        "⏱️ Intervalo (minutos)",
+        options=[5, 15, 30, 60, 120, 240, 720],
+        value=interval_current if interval_current in [5, 15, 30, 60, 120, 240, 720] else 30
+    )
 
-if autopilot_active != is_active_current or (autopilot_active and autopilot_interval != interval_current):
-    effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
-    cv_txt = st.session_state.get("cv_text", "")
-    if autopilot_active:
-        payload = {
-            "interval_minutes": autopilot_interval,
-            "keywords": "Mozo, Auxiliar administrativo, Desarrollador Python",
-            "location": "Alicante",
-            "cv_text": cv_txt,
-            "gemini_key": effective_key,
-            "telegram_token": telegram_token_input,
-            "telegram_chat_id": telegram_chat_id_input,
-            "run_immediately": False
-        }
-        try:
-            r = requests.post("http://localhost:8000/scheduler/start", json=payload, timeout=5)
-            if r.status_code == 200:
-                st.sidebar.success(f"🟢 Piloto Automático ACTIVADO (cada {autopilot_interval} min)")
-            else:
-                st.sidebar.error("Error al iniciar el piloto automático en FastAPI.")
-        except Exception as e:
-            st.sidebar.warning("⚡ Para activar el Piloto Automático en segundo plano, asegúrate de que `main.py` esté ejecutándose.")
-    else:
-        try:
-            r = requests.post("http://localhost:8000/scheduler/stop", timeout=5)
-            if r.status_code == 200:
-                st.sidebar.info("🔴 Piloto Automático DETENIDO")
-        except Exception:
-            pass
+    if autopilot_active != is_active_current or (autopilot_active and autopilot_interval != interval_current):
+        effective_key = api_key_input.strip() if api_key_input else os.getenv("GEMINI_API_KEY", "").strip()
+        cv_txt = st.session_state.get("cv_text", "")
+        eff_token = telegram_token_input.strip() if telegram_token_input else os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+        eff_chat = telegram_chat_id_input.strip() if telegram_chat_id_input else os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        if autopilot_active:
+            payload = {
+                "interval_minutes": autopilot_interval,
+                "keywords": "Mozo, Auxiliar administrativo, Desarrollador Python",
+                "location": "Alicante",
+                "cv_text": cv_txt,
+                "gemini_key": effective_key,
+                "telegram_token": eff_token,
+                "telegram_chat_id": eff_chat,
+                "run_immediately": False
+            }
+            try:
+                r = requests.post("http://localhost:8000/scheduler/start", json=payload, timeout=5)
+                if r.status_code == 200:
+                    st.success(f"🟢 Piloto Automático ACTIVADO (cada {autopilot_interval} min)")
+                else:
+                    st.error("Error al iniciar el piloto automático en FastAPI.")
+            except Exception as e:
+                st.warning("⚡ Para activar el Piloto Automático en segundo plano, asegúrate de que `main.py` esté ejecutándose.")
+        else:
+            try:
+                r = requests.post("http://localhost:8000/scheduler/stop", timeout=5)
+                if r.status_code == 200:
+                    st.info("🔴 Piloto Automático DETENIDO")
+            except Exception:
+                pass
 
-if is_active_current:
-    st.sidebar.success(f"🟢 **Activo** (Cada {interval_current} min)")
-    if sched_state.get("last_run"):
-        st.sidebar.caption(f"⏱️ **Última ejec:** `{sched_state['last_run'][:19].replace('T', ' ')}`")
-    if sched_state.get("next_run"):
-        st.sidebar.caption(f"🔮 **Próxima ejec:** `{sched_state['next_run'][:19].replace('T', ' ')}`")
-else:
-    st.sidebar.info("🔴 **Inactivo**")
-
-st.sidebar.divider()
-headless_option = st.sidebar.checkbox("Modo Oculto (Headless)", value=False)
+headless_option = True
 
 # Main App Smartphone Top Bar Header
 st.markdown("""
