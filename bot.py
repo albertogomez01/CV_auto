@@ -346,7 +346,7 @@ def start_health_server():
 # --- EXECUTION ENTRYPOINT ---
 
 def main():
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw").strip()
     if not token:
         print("❌ ERROR: Debes configurar la variable TELEGRAM_BOT_TOKEN en el archivo .env")
         sys.exit(1)

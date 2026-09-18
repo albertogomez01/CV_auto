@@ -612,8 +612,8 @@ st.sidebar.info("📱 **Bot Telegram:** Conectado 24/7")
 
 with st.sidebar.expander("🛠️ Ajustes Avanzados & Credenciales", expanded=False):
     api_key_input = st.text_input("🔑 Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
-    telegram_token_input = st.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", ""), type="password")
-    telegram_chat_id_input = st.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", ""))
+    telegram_token_input = st.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw"), type="password")
+    telegram_chat_id_input = st.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", "6270123390"))
     
     session_exists = os.path.exists("storageState.json")
     if session_exists:

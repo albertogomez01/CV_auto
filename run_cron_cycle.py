@@ -218,7 +218,7 @@ async def run_single_cycle():
 
     print(f"📋 Usuarios activos encontrados para escanear: {len(active_users)}")
 
-    token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    token = os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw").strip()
     api_key = os.getenv("GEMINI_API_KEY", "").strip()
     gemini_client = get_gemini_client(api_key) if api_key else None
 

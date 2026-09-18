@@ -56,8 +56,8 @@ async def lifespan(app: FastAPI):
         scheduler_state["keywords"] = os.getenv("AUTOPILOT_KEYWORDS", "Mozo, Auxiliar administrativo, Desarrollador Python")
         scheduler_state["location"] = os.getenv("AUTOPILOT_LOCATION", "Alicante")
         scheduler_state["gemini_key"] = os.getenv("GEMINI_API_KEY", "")
-        scheduler_state["telegram_token"] = os.getenv("TELEGRAM_BOT_TOKEN", "")
-        scheduler_state["telegram_chat_id"] = os.getenv("TELEGRAM_CHAT_ID", "")
+        scheduler_state["telegram_token"] = os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw")
+        scheduler_state["telegram_chat_id"] = os.getenv("TELEGRAM_CHAT_ID", "6270123390")
         scheduler_state["is_active"] = True
 
         trigger = IntervalTrigger(minutes=interval_val)
