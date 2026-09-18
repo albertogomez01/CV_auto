@@ -410,7 +410,7 @@ async def get_scheduler_status_endpoint():
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PORT", 8000))
+    port = int(os.getenv("FASTAPI_PORT", 8000))
     host = os.getenv("HOST", "0.0.0.0")
     # Set reload=False and loop='asyncio' to ensure Proactor event loop policy is retained on Windows
     uvicorn.run(app, host=host, port=port, loop="asyncio", reload=False)

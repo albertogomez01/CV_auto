@@ -59,10 +59,13 @@ def main():
 
     # 1. Iniciar FastAPI Backend (puerto 8000 interno)
     print("\n⚡ [1/3] Iniciando Servidor Backend FastAPI (Port 8000)...")
+    api_env = os.environ.copy()
+    api_env["FASTAPI_PORT"] = "8000"
     p_api = subprocess.Popen(
         [PYTHON_BIN, "main.py"],
         stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT
+        stderr=subprocess.STDOUT,
+        env=api_env
     )
     processes.append((p_api, "FastAPI Backend"))
 
@@ -127,7 +130,7 @@ def main():
                     print(f"⚠️ Aviso: El servicio '{name}' se ha detenido (código {p.returncode}). Reintentando...")
                     # Reiniciar subproceso si cae
                     if name == "FastAPI Backend":
-                        new_p = subprocess.Popen([PYTHON_BIN, "main.py"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT)
+                        new_p = subprocess.Popen([PYTHON_BIN, "main.py"], stdout=subprocess.DEVNULL, stderr=subprocess.STDOUT, env=api_env)
                     elif name == "Dashboard Streamlit":
                         new_p = subprocess.Popen(st_cmd)
                     elif name == "Bot de Telegram":
