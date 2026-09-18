@@ -1,0 +1,62 @@
+name: CV Auto Unattended Job Search Cron
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'  # Runs every 30 minutes
+  workflow_dispatch:        # Allows manual trigger from GitHub Actions tab
+
+permissions:
+  contents: write           # Required to commit and push updated applications.db back to repo
+
+jobs:
+  job_search_cycle:
+    name: Run Job Search & Application Cycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: 🌐 Install Playwright Chromium with system dependencies
+        run: |
+          python -m playwright install --with-deps chromium
+
+      - name: 🚀 Run Unattended Job Search & Evaluation Cycle
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          HEADLESS: "true"
+        run: |
+          python run_cron_cycle.py
+
+      - name: 💾 Persist & Commit Database changes (applications.db)
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Stage database and config updates
+          git add applications.db bot_config.json user_cv.txt || true
+          
+          # Check if there are changes to commit
+          if ! git diff --cached --quiet; then
+            echo "✅ Changes detected in database. Committing and pushing back to repository..."
+            git commit -m "chore(cron): Auto-update applications.db with processed vacancies [skip ci]"
+            git push origin main
+          else
+            echo "ℹ️ No database changes in this cycle."
+          fi

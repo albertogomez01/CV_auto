@@ -20,10 +20,8 @@ build/
 user_data/
 
 # Databases & Session storage
-*.db
 *.sqlite
 *.sqlite3
-applications.db
 storageState.json
 
 # Node & Mobile build outputs
