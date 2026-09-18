@@ -7,19 +7,42 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 DB_PATH = os.getenv("DATABASE_PATH", "jobs.db")
+IS_POSTGRES = bool(DATABASE_URL)
+
+if IS_POSTGRES:
+    try:
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+    except ImportError:
+        IS_POSTGRES = False
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    if IS_POSTGRES:
+        return psycopg2.connect(DATABASE_URL)
+    else:
+        conn = sqlite3.connect(DB_PATH)
+        conn.row_factory = sqlite3.Row
+        return conn
+
+def get_cursor(conn):
+    if IS_POSTGRES:
+        return conn.cursor(cursor_factory=RealDictCursor)
+    return conn.cursor()
+
+def format_sql(sql: str) -> str:
+    if IS_POSTGRES:
+        return sql.replace("?", "%s")
+    return sql
 
 def init_db():
-    with get_connection() as conn:
-        cursor = conn.cursor()
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
         
         # 1. Tabla de Usuarios para multiusuario Telegram
-        cursor.execute("""
+        sql_users = """
             CREATE TABLE IF NOT EXISTS users (
                 chat_id TEXT PRIMARY KEY,
                 username TEXT,
@@ -29,10 +52,11 @@ def init_db():
                 active INTEGER DEFAULT 1,
                 created_at TEXT
             )
-        """)
+        """
+        cursor.execute(format_sql(sql_users))
 
         # 2. Tabla de Aplicaciones / Vacantes evaluadas
-        cursor.execute("""
+        sql_apps = """
             CREATE TABLE IF NOT EXISTS applications (
                 job_id TEXT,
                 user_id TEXT DEFAULT '',
@@ -50,16 +74,20 @@ def init_db():
                 killer_answers TEXT,
                 PRIMARY KEY (job_id, user_id)
             )
-        """)
+        """
+        cursor.execute(format_sql(sql_apps))
 
-        # Migraciones dinámicas para bases de datos SQLite existentes
-        cursor.execute("PRAGMA table_info(applications)")
-        existing_cols = [row[1] for row in cursor.fetchall()]
-        for col_name in ["salary", "location", "modality", "sector", "platform", "user_id"]:
-            if col_name not in existing_cols:
-                cursor.execute(f"ALTER TABLE applications ADD COLUMN {col_name} TEXT DEFAULT ''")
+        # Migraciones dinámicas para tablas SQLite existentes (si no es Postgres)
+        if not IS_POSTGRES:
+            cursor.execute("PRAGMA table_info(applications)")
+            existing_cols = [row[1] for row in cursor.fetchall()]
+            for col_name in ["salary", "location", "modality", "sector", "platform", "user_id"]:
+                if col_name not in existing_cols:
+                    cursor.execute(f"ALTER TABLE applications ADD COLUMN {col_name} TEXT DEFAULT ''")
         
         conn.commit()
+    finally:
+        conn.close()
 
 # --- FUNCIONES DE USUARIOS (MULTIUSER) ---
 
@@ -73,9 +101,10 @@ def upsert_user(
 ) -> Dict[str, Any]:
     cid_str = str(chat_id)
     now_str = datetime.now().isoformat()
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
+        sql = """
             INSERT INTO users (chat_id, username, job_title, location, cv_text, active, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(chat_id) DO UPDATE SET
@@ -84,32 +113,47 @@ def upsert_user(
                 location = CASE WHEN excluded.location != '' THEN excluded.location ELSE users.location END,
                 cv_text = CASE WHEN excluded.cv_text != '' THEN excluded.cv_text ELSE users.cv_text END,
                 active = excluded.active
-        """, (cid_str, username or "", job_title or "", location or "", cv_text or "", active, now_str))
+        """
+        cursor.execute(format_sql(sql), (cid_str, username or "", job_title or "", location or "", cv_text or "", active, now_str))
         conn.commit()
         return get_user(cid_str) or {}
+    finally:
+        conn.close()
 
 def get_user(chat_id: str) -> Optional[Dict[str, Any]]:
     cid_str = str(chat_id)
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE chat_id = ?", (cid_str,))
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
+        sql = "SELECT * FROM users WHERE chat_id = ?"
+        cursor.execute(format_sql(sql), (cid_str,))
         row = cursor.fetchone()
         return dict(row) if row else None
+    finally:
+        conn.close()
 
 def get_active_users() -> List[Dict[str, Any]]:
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE active = 1 ORDER BY created_at DESC")
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
+        sql = "SELECT * FROM users WHERE active = 1 ORDER BY created_at DESC"
+        cursor.execute(format_sql(sql))
         rows = cursor.fetchall()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
 
 def set_user_active(chat_id: str, active: int) -> bool:
     cid_str = str(chat_id)
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET active = ? WHERE chat_id = ?", (active, cid_str))
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
+        sql = "UPDATE users SET active = ? WHERE chat_id = ?"
+        cursor.execute(format_sql(sql), (active, cid_str))
         conn.commit()
         return cursor.rowcount > 0
+    finally:
+        conn.close()
 
 # --- FUNCIONES DE APLICACIONES Y DEDUPLICACIÓN ---
 
@@ -121,57 +165,64 @@ def is_job_processed(
     user_id: Optional[str] = None
 ) -> bool:
     uid_str = str(user_id) if user_id else ""
-    with get_connection() as conn:
-        cursor = conn.cursor()
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
         
         # 1. Comprobar por ID exacto de la vacante para este usuario
         if job_id:
             if uid_str:
-                cursor.execute("SELECT 1 FROM applications WHERE job_id = ? AND (user_id = ? OR user_id = '')", (job_id, uid_str))
+                sql = "SELECT 1 FROM applications WHERE job_id = ? AND (user_id = ? OR user_id = '')"
+                cursor.execute(format_sql(sql), (job_id, uid_str))
             else:
-                cursor.execute("SELECT 1 FROM applications WHERE job_id = ?", (job_id,))
+                sql = "SELECT 1 FROM applications WHERE job_id = ?"
+                cursor.execute(format_sql(sql), (job_id,))
             if cursor.fetchone() is not None:
                 return True
 
         # 2. Comprobar por URL/enlace directo
         if link and len(link) > 5:
             if uid_str:
-                cursor.execute("SELECT 1 FROM applications WHERE link = ? AND (user_id = ? OR user_id = '')", (link, uid_str))
+                sql = "SELECT 1 FROM applications WHERE link = ? AND (user_id = ? OR user_id = '')"
+                cursor.execute(format_sql(sql), (link, uid_str))
             else:
-                cursor.execute("SELECT 1 FROM applications WHERE link = ?", (link,))
+                sql = "SELECT 1 FROM applications WHERE link = ?"
+                cursor.execute(format_sql(sql), (link,))
             if cursor.fetchone() is not None:
                 return True
 
         # 3. Comprobar por par Título + Empresa para este usuario
         if title and company and len(title) > 3 and len(company) > 2:
             if uid_str:
-                cursor.execute(
-                    "SELECT 1 FROM applications WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND LOWER(TRIM(company)) = LOWER(TRIM(?)) AND (user_id = ? OR user_id = '')",
-                    (title, company, uid_str)
-                )
+                sql = "SELECT 1 FROM applications WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND LOWER(TRIM(company)) = LOWER(TRIM(?)) AND (user_id = ? OR user_id = '')"
+                cursor.execute(format_sql(sql), (title, company, uid_str))
             else:
-                cursor.execute(
-                    "SELECT 1 FROM applications WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND LOWER(TRIM(company)) = LOWER(TRIM(?))",
-                    (title, company)
-                )
+                sql = "SELECT 1 FROM applications WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND LOWER(TRIM(company)) = LOWER(TRIM(?))"
+                cursor.execute(format_sql(sql), (title, company))
             if cursor.fetchone() is not None:
                 return True
 
         return False
+    finally:
+        conn.close()
 
 def update_job_status(job_identifier: str, status: str, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     import hashlib
     uid_str = str(user_id) if user_id else ""
-    with get_connection() as conn:
-        cursor = conn.cursor()
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
         if uid_str:
-            cursor.execute("SELECT * FROM applications WHERE job_id = ? AND user_id = ?", (job_identifier, uid_str))
+            sql = "SELECT * FROM applications WHERE job_id = ? AND user_id = ?"
+            cursor.execute(format_sql(sql), (job_identifier, uid_str))
         else:
-            cursor.execute("SELECT * FROM applications WHERE job_id = ?", (job_identifier,))
+            sql = "SELECT * FROM applications WHERE job_id = ?"
+            cursor.execute(format_sql(sql), (job_identifier,))
         row = cursor.fetchone()
         
         if not row:
-            cursor.execute("SELECT * FROM applications")
+            sql_all = "SELECT * FROM applications"
+            cursor.execute(format_sql(sql_all))
             rows = cursor.fetchall()
             for r in rows:
                 r_dict = dict(r)
@@ -182,14 +233,18 @@ def update_job_status(job_identifier: str, status: str, user_id: Optional[str] =
                     break
         
         if row:
-            target_id = row["job_id"]
-            target_uid = row["user_id"]
-            cursor.execute("UPDATE applications SET status = ? WHERE job_id = ? AND user_id = ?", (status, target_id, target_uid))
+            r_dict = dict(row)
+            target_id = r_dict["job_id"]
+            target_uid = r_dict.get("user_id", "")
+            sql_upd = "UPDATE applications SET status = ? WHERE job_id = ? AND user_id = ?"
+            cursor.execute(format_sql(sql_upd), (status, target_id, target_uid))
             conn.commit()
-            cursor.execute("SELECT * FROM applications WHERE job_id = ? AND user_id = ?", (target_id, target_uid))
+            cursor.execute(format_sql("SELECT * FROM applications WHERE job_id = ? AND user_id = ?"), (target_id, target_uid))
             updated_row = cursor.fetchone()
-            return dict(updated_row) if updated_row else dict(row)
+            return dict(updated_row) if updated_row else r_dict
         return None
+    finally:
+        conn.close()
 
 def discard_job(
     job_id: str,
@@ -238,9 +293,10 @@ def record_application(
     answers_json = json.dumps(killer_answers) if killer_answers else None
     uid_str = str(user_id) if user_id else ""
     
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
+        sql = """
             INSERT INTO applications (job_id, user_id, title, company, link, score, status, date_applied, salary, location, modality, sector, platform, killer_answers)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(job_id, user_id) DO UPDATE SET
@@ -253,23 +309,23 @@ def record_application(
                 sector = excluded.sector,
                 platform = excluded.platform,
                 killer_answers = excluded.killer_answers
-        """, (job_id, uid_str, title, company, link, score, status, date_str, salary, location, modality, sector, platform, answers_json))
+        """
+        cursor.execute(format_sql(sql), (job_id, uid_str, title, company, link, score, status, date_str, salary or "", location or "", modality or "", sector or "", platform or "", answers_json or ""))
         conn.commit()
+    finally:
+        conn.close()
 
 def get_all_applications(limit: int = 100, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
     uid_str = str(user_id) if user_id else ""
-    with get_connection() as conn:
-        cursor = conn.cursor()
+    conn = get_connection()
+    try:
+        cursor = get_cursor(conn)
         if uid_str:
-            cursor.execute(
-                "SELECT job_id, user_id, title, company, link, score, status, date_applied, salary, location, modality, sector, platform, killer_answers FROM applications WHERE user_id = ? ORDER BY date_applied DESC LIMIT ?",
-                (uid_str, limit)
-            )
+            sql = "SELECT job_id, user_id, title, company, link, score, status, date_applied, salary, location, modality, sector, platform, killer_answers FROM applications WHERE user_id = ? ORDER BY date_applied DESC LIMIT ?"
+            cursor.execute(format_sql(sql), (uid_str, limit))
         else:
-            cursor.execute(
-                "SELECT job_id, user_id, title, company, link, score, status, date_applied, salary, location, modality, sector, platform, killer_answers FROM applications ORDER BY date_applied DESC LIMIT ?",
-                (limit,)
-            )
+            sql = "SELECT job_id, user_id, title, company, link, score, status, date_applied, salary, location, modality, sector, platform, killer_answers FROM applications ORDER BY date_applied DESC LIMIT ?"
+            cursor.execute(format_sql(sql), (limit,))
         rows = cursor.fetchall()
         result = []
         for row in rows:
@@ -281,6 +337,8 @@ def get_all_applications(limit: int = 100, user_id: Optional[str] = None) -> Lis
                     pass
             result.append(item)
         return result
+    finally:
+        conn.close()
 
 # Auto initialize DB on module import
 init_db()

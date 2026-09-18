@@ -40,12 +40,20 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           HEADLESS: "true"
         run: |
           python run_cron_cycle.py
 
       - name: 💾 Persist & Commit Database changes (applications.db)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          if [ -n "$DATABASE_URL" ]; then
+            echo "ℹ️ Remote PostgreSQL DATABASE_URL detected. Skipping SQLite git commit."
+            exit 0
+          fi
+
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           
