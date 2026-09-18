@@ -1,9 +1,9 @@
 services:
   - type: web
-    name: cv-auto-bot
+    name: cv-auto-app
     env: python
     buildCommand: pip install -r requirements.txt && python -m playwright install --with-deps chromium
-    startCommand: python bot.py
+    startCommand: python run_all.py
     envVars:
       - key: HEADLESS
         value: "true"

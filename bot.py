@@ -316,6 +316,8 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
 # --- HEALTH CHECK WEB SERVER FOR CLOUD HOSTING (RENDER / RAILWAY) ---
 
 def start_health_server():
+    if os.getenv("DISABLE_BOT_HEALTH_SERVER") == "1":
+        return
     port_str = os.getenv("PORT", "").strip()
     if not port_str:
         return
