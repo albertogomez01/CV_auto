@@ -739,6 +739,8 @@ tab_workflow, tab_chat, tab_telegram, tab_direct, tab_history, tab_analytics = s
 # TAB 1: DYNAMIC PROFILE EXTRACTION & CUSTOM FILTERS PANEL
 # ==============================================================================
 with tab_workflow:
+    st.info("💡 **¿Eres nuevo? 3 pasos sencillos:** 1. Sube o edita tu CV abajo. 2. Elige tus sectores o ciudades. 3. Pulsa **🚀 Buscar Candidaturas** para ver las mejores ofertas evaluadas por la IA.")
+
     # STEP 1: UPLOAD / EDIT CV
     st.markdown("### 1️⃣ Carga de Currículum Vitae")
     
