@@ -2,6 +2,10 @@ import os
 import asyncio
 from typing import Dict, Any, Optional
 import httpx
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 async def send_telegram_notification(
     bot_token: str,
@@ -26,6 +30,10 @@ async def send_telegram_notification(
     salary = job.get("salary", "Salario no especificado")
     location = job.get("location", "España")
 
+    import hashlib
+    job_id = job.get("job_id") or job.get("id") or link or f"{title}_{company}"
+    job_hash = hashlib.md5(str(job_id).encode("utf-8")).hexdigest()[:16]
+
     msg_text = (
         f"🚨 <b>¡NUEVA VACANTE DESTACADA ({score}% Coincidencia)!</b>\n\n"
         f"📌 <b>Puesto:</b> {title}\n"
@@ -34,14 +42,25 @@ async def send_telegram_notification(
         f"💰 <b>Salario:</b> {salary}\n"
         f"🏷️ <b>Plataforma:</b> {platform}\n"
         f"📦 <b>Sector:</b> {sector}\n\n"
-        f"🔗 <a href='{link}'><b>Ver Oferta y Postular</b></a>"
+        f"<i>¿Te interesa esta propuesta? Pulsa una opción abajo para actualizar tu historial:</i>"
     )
+
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "👍 Me interesa", "callback_data": f"interest_yes_{job_hash}"},
+                {"text": "👎 No me interesa", "callback_data": f"interest_no_{job_hash}"}
+            ],
+            [{"text": "🔗 Ver Oferta", "url": link}]
+        ]
+    }
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload = {
         "chat_id": cid,
         "text": msg_text,
         "parse_mode": "HTML",
+        "reply_markup": reply_markup,
         "disable_web_page_preview": False
     }
 

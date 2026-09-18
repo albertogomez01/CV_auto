@@ -36,6 +36,8 @@ web-build/
 
 # Logs & Temp files
 *.log
+*.xml
+screenshot.png
 scratch/
 .system_generated/
 .DS_Store

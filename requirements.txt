@@ -10,4 +10,6 @@ pyyaml>=6.0.1
 requests>=2.31.0
 pypdf>=4.0.0
 apscheduler>=3.10.4
+python-telegram-bot[job-queue]>=20.0
+
 

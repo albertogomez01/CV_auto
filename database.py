@@ -42,11 +42,69 @@ def init_db():
                 cursor.execute(f"ALTER TABLE applications ADD COLUMN {col_name} TEXT")
         conn.commit()
 
-def is_job_processed(job_id: str) -> bool:
+def is_job_processed(
+    job_id: Optional[str] = None,
+    link: Optional[str] = None,
+    title: Optional[str] = None,
+    company: Optional[str] = None
+) -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM applications WHERE job_id = ? AND status IN ('applied', 'success', 'already_applied', 'already_applied_on_site', 'discarded', 'descartada')", (job_id,))
-        return cursor.fetchone() is not None
+        
+        # 1. Comprobar por ID exacto de la vacante (cualquier estado en la BD)
+        if job_id:
+            cursor.execute("SELECT 1 FROM applications WHERE job_id = ?", (job_id,))
+            if cursor.fetchone() is not None:
+                return True
+
+        # 2. Comprobar por URL/enlace directo
+        if link and len(link) > 5:
+            cursor.execute("SELECT 1 FROM applications WHERE link = ?", (link,))
+            if cursor.fetchone() is not None:
+                return True
+
+        # 3. Comprobar por par Título + Empresa (evita duplicados entre plataformas)
+        if title and company and len(title) > 3 and len(company) > 2:
+            cursor.execute(
+                "SELECT 1 FROM applications WHERE LOWER(TRIM(title)) = LOWER(TRIM(?)) AND LOWER(TRIM(company)) = LOWER(TRIM(?))",
+                (title, company)
+            )
+            if cursor.fetchone() is not None:
+                return True
+
+        return False
+
+
+def update_job_status(job_identifier: str, status: str) -> Optional[Dict[str, Any]]:
+    """Updates job status by exact job_id or MD5 hash prefix of job_id."""
+    import hashlib
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # 1. Comprobar coincidencia exacta por job_id
+        cursor.execute("SELECT * FROM applications WHERE job_id = ?", (job_identifier,))
+        row = cursor.fetchone()
+        
+        # 2. Si no hay coincidencia exacta, buscar por prefijo del hash MD5
+        if not row:
+            cursor.execute("SELECT * FROM applications")
+            rows = cursor.fetchall()
+            for r in rows:
+                r_dict = dict(r)
+                j_id = str(r_dict.get("job_id", ""))
+                h = hashlib.md5(j_id.encode("utf-8")).hexdigest()[:16]
+                if h == job_identifier or j_id == job_identifier:
+                    row = r
+                    break
+        
+        if row:
+            target_id = row["job_id"]
+            cursor.execute("UPDATE applications SET status = ? WHERE job_id = ?", (status, target_id))
+            conn.commit()
+            cursor.execute("SELECT * FROM applications WHERE job_id = ?", (target_id,))
+            updated_row = cursor.fetchone()
+            return dict(updated_row) if updated_row else dict(row)
+        return None
+
 
 def discard_job(
     job_id: str,

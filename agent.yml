@@ -2,7 +2,7 @@ version: "1"
 
 model:
   provider: google
-  name: gemini-2.5-flash
+  name: gemini-1.5-flash
   api_key: ${GEMINI_API_KEY}
 
 instructions: |
@@ -16,7 +16,7 @@ instructions: |
   Objetivo:
   1. Consulta el servicio local para obtener ofertas de trabajo con los parámetros:
      - keywords: "Desarrollador Software"
-     - location: "Madrid"
+     - location: "Alicante"
      - max_results: 10
   2. Para cada vacante obtenida, calcula un porcentaje de coincidencia (score de 0 a 100) contra el CV base.
   3. Si la vacante incluye preguntas de filtrado (killer questions), genera respuestas coherentes y optimizadas según la experiencia del perfil.
@@ -34,7 +34,7 @@ tools:
         Content-Type: application/json
       body:
         keywords: "Desarrollador Software"
-        location: "Madrid"
+        location: "Alicante"
         max_results: 10
 
   - name: apply_to_job

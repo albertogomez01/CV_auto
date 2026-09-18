@@ -1,0 +1,81 @@
+ALBERTO GÓMEZ TEROL 
+ 
+Alicante, España | albgomter@gmail.com | +34 659 870 523 
+ 
+PERFIL PROFESIONAL 
+ 
+Desarrollador Full-Stack y Product Owner con formación en ADE y Ciencias de la 
+Computación. Especializado en la creación, despliegue y monetización de aplicaciones web, 
+integración de APIs de IA generativa (Google Gemini, OpenAI) y automatización de flujos de 
+datos complejos. Perfil híbrido enfocado en desarrollo ágil, resolución de problemas y 
+conexión directa entre viabilidad técnica y estrategia de negocio. 
+ 
+EXPERIENCIA TÉCNICA Y PROYECTOS 
+ 
+Full-Stack Developer & Product Owner | Proyectos Digitales Independientes 
+ 
+2024 – Actualidad 
+ 
+● Sticker Tracker (Mundial 2026): Diseño, desarrollo y lanzamiento de una 
+Progressive Web App (PWA) construida con React y arquitectura serverless en 
+Firebase (Google Cloud). 
+ 
+○ Implementación de motores de emparejamiento inteligente y algoritmos de 
+intercambio comercial a escala global. 
+○  
+○ Automatización de ingesta de datos no estructurados (mensajes, texto plano) 
+combinando expresiones regulares (Regex) y APIs de visión artificial (OCR 
+con OpenAI / Google Cloud Vision). 
+○  
+○ Integración de modelos de negocio: monetización publicitaria (Google 
+AdSense), marketing de afiliación y negociación de acuerdos de visibilidad y 
+tráfico B2B. 
+○  
+○ Configuración del ciclo completo de CI/CD, control de versiones (Git/GitHub) 
+y despliegue continuo en Vercel. 
+○  
+● iTRAVEL_MAP: Desarrollo integral de una plataforma web interactiva con mapas 
+dinámicos en tiempo real y asistentes conversacionales integrados mediante la API 
+de Google Gemini. 
+● Atención al Cliente y Operaciones de Venta Online 
+ 
+Sector Retail (Ropa y Muebles) 
+ 
+● Gestión de pedidos, resolución de incidencias en canales digitales y soporte directo 
+enfocado en la experiencia del consumidor. 
+ 
+ 
+ 
+ 
+COMPETENCIAS TÉCNICAS 
+ 
+● Inteligencia Artificial y LLMs: Integración de APIs de Google Gemini (Google AI 
+Studio) y OpenAI con respuestas en JSON estructurado; arquitecturas RAG con 
+bases de datos vectoriales; configuración de agentes autónomos y prompt 
+engineering (Vertex AI Agent Builder, Antigravity IDE). 
+ 
+● Desarrollo Frontend y Web: React, TypeScript, Vite, Tailwind CSS, Progressive 
+Web Apps (PWAs), JavaFX. 
+ 
+● Backend y Cloud: Node.js, Python, arquitecturas Serverless en Firebase / Google 
+Cloud Platform, despliegues continuos en Vercel. 
+ 
+● Automatización y Datos: Procesamiento de texto no estructurado con Regex, OCR 
+(Google Cloud Vision, OpenAI Vision), SQLite. 
+ 
+● Gestión de Producto y Negocio: Diseño de producto de extremo a extremo, 
+métricas de retención, growth hacking y monetización digital. 
+ 
+EDUCACIÓN 
+ 
+● Grado en Administración y Dirección de Empresas (ADE) | Universidad de 
+Alicante (En curso, modalidad a tiempo parcial) 
+ 
+ 
+● Bachillerato | Inmaculada Jesuitas Alicante 
+ 
+IDIOMAS 
+ 
+● Español: Nativo 
+ 
+● Inglés: Nivel B1

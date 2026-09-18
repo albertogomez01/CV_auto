@@ -72,19 +72,23 @@ docker compose up --build
 
 El contenedor del agente se conectará a la API local a través de `http://host.docker.internal:8000` ejecutando el flujo definido en `agent.yml`.
 
-#### Opción B: Ejecución Local en Python
+#### Opción B: Ejecución Unificada Local (Recomendado para Windows / Local)
 
-Si prefieres ejecutar los componentes directamente en tu entorno Python local:
+Arranca el sistema completo (API Backend, Dashboard Streamlit y Bot de Telegram) con una sola ejecución:
 
-1. Arranca la API local:
-   ```bash
-   python main.py
-   ```
+```bash
+python run_all.py
+```
 
-2. En otra terminal, ejecuta el agente autónomo:
-   ```bash
-   python agent_runner.py
-   ```
+O en Windows haciendo doble clic en:
+```cmd
+run.bat
+```
+
+> **Nota**: Para ejecutar el agente autónomo de inmediato en la misma llamada, añade el parámetro `--run-agent`:
+> ```bash
+> python run_all.py --run-agent
+> ```
 
 ---
 

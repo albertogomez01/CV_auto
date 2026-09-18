@@ -21,6 +21,7 @@ import database
 from infojobs_scraper import search_jobs, apply_to_job, extract_job_id
 from indeed_scraper import search_indeed
 from jooble_scraper import search_jooble
+from adecco_scraper import search_adecco
 from telegram_notifier import send_telegram_notification, test_telegram_connection
 
 load_dotenv()
@@ -159,7 +160,16 @@ async def search_jobs_endpoint(payload: SearchJobsRequest):
                 location=payload.location or "",
                 max_results=payload.max_results or 10
             )
-            ij_results, ind_results, jooble_results = await asyncio.gather(ij_task, ind_task, jooble_task, return_exceptions=True)
+            adecco_task = search_adecco(
+                keywords=payload.keywords,
+                location=payload.location or "",
+                max_results=payload.max_results or 10,
+                playwright=p,
+                headless=HEADLESS_MODE
+            )
+            ij_results, ind_results, jooble_results, adecco_results = await asyncio.gather(
+                ij_task, ind_task, jooble_task, adecco_task, return_exceptions=True
+            )
 
         if isinstance(ij_results, Exception):
             print(f"InfoJobs search error: {ij_results}")
@@ -170,10 +180,13 @@ async def search_jobs_endpoint(payload: SearchJobsRequest):
         if isinstance(jooble_results, Exception):
             print(f"Jooble search error: {jooble_results}")
             jooble_results = []
+        if isinstance(adecco_results, Exception):
+            print(f"Adecco search error: {adecco_results}")
+            adecco_results = []
 
         # Deduplication by (title, company)
         dedup_map = {}
-        for job in (ij_results + ind_results + jooble_results):
+        for job in (ij_results + ind_results + jooble_results + adecco_results):
             key = (job.get("title", "").strip().lower(), job.get("company", "").strip().lower())
             if key in dedup_map:
                 existing = dedup_map[key]

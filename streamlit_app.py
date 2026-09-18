@@ -25,6 +25,9 @@ importlib.reload(indeed_scraper)
 from jooble_scraper import search_jooble
 import jooble_scraper
 importlib.reload(jooble_scraper)
+from adecco_scraper import search_adecco
+import adecco_scraper
+importlib.reload(adecco_scraper)
 from telegram_notifier import send_telegram_notification, test_telegram_connection
 from login_setup import run_login_setup
 
@@ -335,7 +338,7 @@ TAREA:
 }}
 """
 
-    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
     response_text = ""
     
     for m in candidate_models:
@@ -398,7 +401,7 @@ REQUISITOS DE LA CARTA:
 3. Resalta 2 o 3 logros o competencias clave del CV que mejor se conecten con las necesidades del puesto.
 4. Devuelve ÚNICAMENTE el texto de la carta de presentación formateado en Markdown limpio (sin comillas extra ni explicaciones adicionales).
 """
-    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
     for m in candidate_models:
         try:
             if client_type == "genai_new":
@@ -468,7 +471,7 @@ Debes responder ÚNICAMENTE con un objeto JSON válido con este formato exacto (
 {cv_text}
 ------------------------
 """
-    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
     response_text = ""
     
     for m in candidate_models:
@@ -566,7 +569,7 @@ CONTEXTO DE LA SESIÓN:
     
     prompt += "\nOriol (Asesor):"
 
-    candidate_models = ["gemini-3.6-flash", "gemini-3.6-pro", "gemini-flash-latest", "gemini-2.5-pro", "gemini-2.5-flash-lite", "gemini-pro"]
+    candidate_models = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash", "gemini-pro"]
     response_text = ""
     last_exception = None
 
@@ -723,9 +726,10 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Main Navigation Tabs
-tab_workflow, tab_chat, tab_direct, tab_history, tab_analytics = st.tabs([
+tab_workflow, tab_chat, tab_telegram, tab_direct, tab_history, tab_analytics = st.tabs([
     "🚀 Agente",
     "💬 Chat Oriol",
+    "📱 Telegram & Alertas",
     "⚡ Postular URL", 
     "📊 Historial",
     "📈 Analítica"
@@ -846,7 +850,7 @@ Experiencia y Capacidades:
             all_found_jobs = []
             search_status = st.empty()
             
-            with st.spinner(f"⚡ Consultando InfoJobs, Indeed y Jooble para {len(selected_sector_keywords)} búsquedas en paralelo..."):
+            with st.spinner(f"⚡ Consultando InfoJobs, Indeed, Jooble y Adecco para {len(selected_sector_keywords)} búsquedas en paralelo..."):
                 async def do_search_all_fast():
                     async with async_playwright() as p:
                         dedup_map = {}
@@ -870,7 +874,16 @@ Experiencia y Capacidades:
                                     location=target_loc,
                                     max_results=max_res_val
                                 )
-                                ij_res, ind_res, jooble_res = await asyncio.gather(ij_task, ind_task, jooble_task, return_exceptions=True)
+                                adecco_task = search_adecco(
+                                    keywords=term,
+                                    location=target_loc,
+                                    max_results=max_res_val,
+                                    playwright=p,
+                                    headless=headless_option
+                                )
+                                ij_res, ind_res, jooble_res, adecco_res = await asyncio.gather(
+                                    ij_task, ind_task, jooble_task, adecco_task, return_exceptions=True
+                                )
                                 
                                 if isinstance(ij_res, Exception):
                                     print(f"Warning InfoJobs search '{term}': {ij_res}")
@@ -881,8 +894,11 @@ Experiencia y Capacidades:
                                 if isinstance(jooble_res, Exception):
                                     print(f"Warning Jooble search '{term}': {jooble_res}")
                                     jooble_res = []
+                                if isinstance(adecco_res, Exception):
+                                    print(f"Warning Adecco search '{term}': {adecco_res}")
+                                    adecco_res = []
 
-                                for j in (ij_res + ind_res + jooble_res):
+                                for j in (ij_res + ind_res + jooble_res + adecco_res):
                                     key = (j.get("title", "").strip().lower(), j.get("company", "").strip().lower())
                                     if key in dedup_map:
                                         existing = dedup_map[key]
@@ -1163,6 +1179,117 @@ with tab_chat:
                     )
             st.markdown(assistant_reply)
             st.session_state["chat_messages"].append({"role": "assistant", "content": assistant_reply})
+
+
+# ==============================================================================
+# TAB TELEGRAM: TELEGRAM INTEGRATED CHAT, ALERTS & DECISION FEED
+# ==============================================================================
+with tab_telegram:
+    st.subheader("📱 Telegram Bot, Alertas & Control Integrado")
+    st.markdown("Gestiona tu canal de Telegram, prueba el envío de alertas y responde **'👍 Me interesa'** o **'👎 No me interesa'** para actualizar tu base de datos en tiempo real.")
+    
+    # 1. Status and Test Header
+    tg_col1, tg_col2 = st.columns([2, 1])
+    eff_bot_token = telegram_token_input.strip() if telegram_token_input else os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+    eff_chat_id = telegram_chat_id_input.strip() if telegram_chat_id_input else os.getenv("TELEGRAM_CHAT_ID", "").strip()
+    
+    with tg_col1:
+        if eff_bot_token and eff_chat_id:
+            st.success(f"✅ **Telegram Conectado:** Token `...{eff_bot_token[-6:]}` | Chat ID `{eff_chat_id}`")
+        else:
+            st.warning("⚠️ **Telegram No Configurado:** Configura el Bot Token y Chat ID en el menú lateral izquierdo.")
+            
+    with tg_col2:
+        if st.button("📲 Probar Notificación Telegram", key="btn_test_tg_tab", use_container_width=True):
+            if not eff_bot_token or not eff_chat_id:
+                st.error("Por favor, configura Bot Token y Chat ID en el menú lateral.")
+            else:
+                with st.spinner("Enviando alerta interactiva de prueba..."):
+                    res = run_async(test_telegram_connection(eff_bot_token, eff_chat_id))
+                    if res.get("status") == "success":
+                        st.toast("✅ ¡Notificación de prueba enviada con botones interactivos!")
+                    else:
+                        st.error(f"Error enviando mensaje: {res.get('message')}")
+
+    st.divider()
+
+    # 2. Feed de Alertas & Decisión Interactivas
+    st.markdown("### 🔔 Feed de Alertas & Decisión sobre Vacantes (Localhost + Telegram)")
+    st.caption("Si marcas **'👎 No me interesa'**, la oferta se registrará inmediatamente como **descartada** en la BD SQLite para que el sistema **NUNCA** vuelva a mostrártela en ninguna búsqueda fututra.")
+
+    apps_db = database.get_all_applications(limit=100)
+    
+    if not apps_db:
+        st.info("Aún no hay vacantes registradas en el historial. Lanza una búsqueda en la pestaña '🚀 Agente' para poblar el feed.")
+    else:
+        f_c1, f_c2 = st.columns([2, 1])
+        with f_c1:
+            feed_filter = st.radio(
+                "Filtrar vacantes:",
+                ["Todas", "⭐ Interesadas", "🔔 Pendientes / Notificadas", "🗑️ Descartadas"],
+                horizontal=True,
+                key="radio_feed_filter"
+            )
+            
+        filtered_db = []
+        for app_item in apps_db:
+            st_val = app_item.get("status", "")
+            if feed_filter == "⭐ Interesadas" and st_val != "interesado":
+                continue
+            if feed_filter == "🔔 Pendientes / Notificadas" and st_val not in ["notified_telegram", "pending", "applied"]:
+                continue
+            if feed_filter == "🗑️ Descartadas" and st_val != "descartada":
+                continue
+            filtered_db.append(app_item)
+
+        st.write(f"Showing {len(filtered_db)} vacantes:")
+
+        for idx_db, job_item in enumerate(filtered_db):
+            j_id = job_item.get("job_id", f"item_{idx_db}")
+            j_title = job_item.get("title", "Puesto no especificado")
+            j_comp = job_item.get("company", "Empresa")
+            j_score = job_item.get("score", 0)
+            j_status = job_item.get("status", "pending")
+            j_plat = job_item.get("platform", "InfoJobs")
+            j_loc = job_item.get("location", "España")
+            j_link = job_item.get("link", "#")
+
+            if j_status == "interesado":
+                status_badge = "<span style='background-color: #FEF08A; color: #854D0E; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;'>⭐ ME INTERESA</span>"
+            elif j_status == "descartada":
+                status_badge = "<span style='background-color: #FEE2E2; color: #991B1B; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;'>❌ DESCARTADA (Oculta para siempre)</span>"
+            elif j_status == "applied":
+                status_badge = "<span style='background-color: #D1FAE5; color: #065F46; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;'>✅ POSTULADO</span>"
+            else:
+                status_badge = "<span style='background-color: #E0F2FE; color: #075985; padding: 4px 10px; border-radius: 12px; font-weight: 700; font-size: 0.8rem;'>🔔 NOTIFICADA</span>"
+
+            with st.container():
+                c_t1, c_t2, c_t3 = st.columns([3.5, 3, 3.5])
+                with c_t1:
+                    st.markdown(f"#### [{j_title}]({j_link})")
+                    st.markdown(f"🏢 **{j_comp}** | 📍 {j_loc}")
+                    st.markdown(f"{status_badge} &nbsp; <span class='score-badge-high'>🎯 {j_score}% Coincidencia</span>", unsafe_allow_html=True)
+                
+                with c_t2:
+                    st.caption(f"**Plataforma:** {j_plat}")
+                    if job_item.get("date_applied"):
+                        st.caption(f"**Fecha:** {job_item.get('date_applied')[:16].replace('T', ' ')}")
+
+                with c_t3:
+                    st.write("")
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
+                        if st.button("👍 Me interesa", key=f"btn_tg_yes_{j_id}_{idx_db}", use_container_width=True, disabled=(j_status == "interesado")):
+                            database.update_job_status(j_id, "interesado")
+                            st.toast("⭐ Vacante marcada como INTERESANTE.")
+                            st.rerun()
+                    with col_b2:
+                        if st.button("👎 No me interesa", key=f"btn_tg_no_{j_id}_{idx_db}", use_container_width=True, disabled=(j_status == "descartada")):
+                            database.update_job_status(j_id, "descartada")
+                            st.toast("❌ Vacante descartada. Guardada para que no vuelva a salir.")
+                            st.rerun()
+
+                st.divider()
 
 
 # ==============================================================================

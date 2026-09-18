@@ -1,0 +1,8 @@
+{
+  "keywords": "Mozo, Auxiliar administrativo, Desarrollador Python",
+  "location": "Alicante",
+  "max_results": 10,
+  "min_score": 50,
+  "auto_enabled": true,
+  "interval_seconds": 1800
+}
