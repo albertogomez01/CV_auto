@@ -20,6 +20,7 @@ if sys.platform == "win32":
 
 from pypdf import PdfReader
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import Conflict
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -385,6 +386,16 @@ def main():
     # Handlers de Botones e Ingesta Directa
     app.add_handler(CallbackQueryHandler(callback_query_handler))
     app.add_handler(MessageHandler(filters.Document.ALL, handle_document_upload))
+
+    # Manejador de errores para capturar Conflict suavemente sin spam de trazas
+    async def handle_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if isinstance(context.error, Conflict):
+            print("⚠️ [Telegram Conflict] Se detectó otra conexión activa con la misma API Key. El bot reintentará automáticamente al quedar la conexión libre...")
+            await asyncio.sleep(5)
+        else:
+            print(f"⚠️ [Telegram Warning] {context.error}")
+
+    app.add_error_handler(handle_error)
 
     print("✅ Bot Multiusuario en ejecución. Presiona Ctrl+C para salir.")
     app.run_polling(drop_pending_updates=True)
