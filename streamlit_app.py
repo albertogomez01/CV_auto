@@ -191,52 +191,59 @@ st.markdown("""
         bottom: 12px !important;
         left: 50% !important;
         transform: translateX(-50%) !important;
-        width: calc(100% - 32px) !important;
-        max-width: 860px !important;
+        width: calc(100% - 24px) !important;
+        max-width: 880px !important;
+        height: 66px !important;
         z-index: 999999 !important;
-        background: rgba(11, 16, 26, 0.92) !important;
+        background: rgba(11, 16, 26, 0.94) !important;
         backdrop-filter: blur(24px) !important;
         -webkit-backdrop-filter: blur(24px) !important;
         border: 1px solid rgba(255, 255, 255, 0.12) !important;
-        border-radius: 24px !important;
-        padding: 6px 8px !important;
+        border-radius: 22px !important;
+        padding: 4px 6px !important;
         display: flex !important;
         justify-content: space-around !important;
         align-items: center !important;
         gap: 4px !important;
-        box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+        box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
         margin: 0 !important;
     }
     
-    /* Target both button and div tab elements */
+    /* Target both button and div tab elements - Stacked Native Icon + Label */
     [data-baseweb="tab"], button[data-baseweb="tab"], div[data-baseweb="tab"] {
-        flex: 1 !important;
+        flex: 1 1 0% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        justify-content: center !important;
         text-align: center !important;
-        padding: 10px 4px !important;
-        font-size: 0.83rem !important;
+        padding: 6px 2px !important;
+        height: 100% !important;
+        font-size: 0.74rem !important;
         font-weight: 600 !important;
-        color: #94A3B8 !important;
-        border-radius: 16px !important;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        color: #64748B !important;
+        border-radius: 14px !important;
+        transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
         background: transparent !important;
         border: 1px solid transparent !important;
         margin: 0 !important;
         cursor: pointer !important;
-        white-space: nowrap !important;
-        overflow: hidden !important;
-        text-overflow: ellipsis !important;
+        white-space: pre-line !important;
+        word-break: break-word !important;
+        line-height: 1.15 !important;
     }
     
     [data-baseweb="tab"]:hover, button[data-baseweb="tab"]:hover {
         color: #F1F5F9 !important;
-        background: rgba(255, 255, 255, 0.05) !important;
+        background: rgba(255, 255, 255, 0.04) !important;
     }
     
     [data-baseweb="tab"][aria-selected="true"], button[data-baseweb="tab"][aria-selected="true"] {
-        color: #F8FAFC !important;
-        background: linear-gradient(135deg, rgba(56, 189, 248, 0.22) 0%, rgba(99, 102, 241, 0.22) 100%) !important;
+        color: #38BDF8 !important;
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%) !important;
         border: 1px solid rgba(56, 189, 248, 0.4) !important;
         box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2) !important;
+        font-weight: 700 !important;
     }
 
     /* TAB CONTENT SMOOTH LEVEL TRANSITION */
@@ -322,38 +329,41 @@ st.markdown("""
     /* MOBILE SMARTPHONE ADAPTATIONS */
     @media (max-width: 768px) {
         .block-container {
-            padding-left: 0.65rem !important;
-            padding-right: 0.65rem !important;
+            padding-left: 0.6rem !important;
+            padding-right: 0.6rem !important;
             padding-top: 0.4rem !important;
-            padding-bottom: 95px !important;
+            padding-bottom: 90px !important;
         }
         
         .main-header {
-            font-size: 1.4rem !important;
+            font-size: 1.35rem !important;
         }
         .sub-header {
-            font-size: 0.86rem !important;
-            margin-bottom: 1rem !important;
+            font-size: 0.85rem !important;
+            margin-bottom: 0.9rem !important;
         }
         
         div[data-baseweb="tab-list"], [data-baseweb="tab-list"] {
             bottom: 0 !important;
             left: 0 !important;
             transform: none !important;
-            width: 100% !important;
+            width: 100vw !important;
             max-width: 100% !important;
+            height: 68px !important;
             border-radius: 0 !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.14) !important;
             border-left: none !important;
             border-right: none !important;
             border-bottom: none !important;
-            padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 12px)) 4px !important;
+            padding: 4px 2px calc(4px + env(safe-area-inset-bottom, 8px)) 2px !important;
+            background: rgba(9, 13, 22, 0.96) !important;
         }
         
         [data-baseweb="tab"], button[data-baseweb="tab"], div[data-baseweb="tab"] {
-            font-size: 0.74rem !important;
-            padding: 8px 2px !important;
+            font-size: 0.68rem !important;
+            padding: 4px 1px !important;
             border-radius: 10px !important;
+            line-height: 1.1 !important;
         }
         
         div[data-testid="column"] {
@@ -928,14 +938,14 @@ st.markdown("""
 <div class="sub-header">Búsqueda concurrente de empleo, clasificación multirubro, cartas de presentación y envío automático con IA</div>
 """, unsafe_allow_html=True)
 
-# Main Navigation Tabs
+# Main Navigation Tabs (Stacked Icon & Label for Mobile App Bottom Dock)
 tab_workflow, tab_chat, tab_telegram, tab_direct, tab_history, tab_analytics = st.tabs([
-    "🚀 Agente",
-    "💬 Chat Oriol",
-    "📱 Telegram & Alertas",
-    "⚡ Postular URL", 
-    "📊 Historial",
-    "📈 Analítica"
+    "🚀\nAgente",
+    "💬\nChat",
+    "📱\nAlertas",
+    "⚡\nPostular", 
+    "📊\nHistorial",
+    "📈\nAnalítica"
 ])
 
 # ==============================================================================
