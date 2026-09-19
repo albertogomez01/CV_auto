@@ -41,16 +41,29 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Native Smartphone App Shell & Premium CSS Styling
+# Native Smartphone App Shell & Premium Minimalist CSS Styling
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     
     html, body, [class*="css"] {
-        font-family: 'Inter', -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         -webkit-tap-highlight-color: transparent;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
     }
     
+    .stApp {
+        background-color: #090D16 !important;
+    }
+    
+    /* Main Content Container Padding to accommodate fixed bottom bar */
+    .block-container {
+        padding-top: 1.2rem !important;
+        padding-bottom: 120px !important;
+        max-width: 1150px !important;
+    }
+
     /* Prevent iOS Safari automatic zooming on input focus */
     input, select, textarea {
         font-size: 16px !important;
@@ -64,127 +77,223 @@ st.markdown("""
         display: none !important;
     }
     
+    /* Headings Typography */
+    h1, h2, h3, .main-header {
+        font-family: 'Outfit', sans-serif !important;
+        letter-spacing: -0.02em !important;
+    }
+    
     /* Native App Bar Top Header */
     .app-top-bar {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 10px 16px;
-        background: rgba(15, 23, 42, 0.85);
-        backdrop-filter: blur(16px);
-        -webkit-backdrop-filter: blur(16px);
-        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 16px;
-        margin-bottom: 16px;
+        padding: 12px 18px;
+        background: rgba(17, 24, 39, 0.75);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
     }
     
     .app-title-box {
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 12px;
     }
     .app-title-text {
-        font-size: 1.25rem;
-        font-weight: 800;
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.3rem;
+        font-weight: 700;
         color: #F8FAFC;
         letter-spacing: -0.3px;
     }
     
     .main-header {
-        font-size: 1.85rem;
+        font-size: 1.9rem;
         font-weight: 800;
-        background: linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%);
+        background: linear-gradient(135deg, #38BDF8 0%, #818CF8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.25rem;
+        margin-bottom: 0.35rem;
         line-height: 1.25;
-        letter-spacing: -0.5px;
     }
     
     .sub-header {
         color: #94A3B8;
         font-size: 0.98rem;
-        margin-bottom: 1.25rem;
-        line-height: 1.45;
+        margin-bottom: 1.5rem;
+        line-height: 1.5;
+        font-weight: 400;
     }
     
     /* Touch-friendly Native Buttons (Min 48px height) */
     .stButton>button {
         border-radius: 14px !important;
-        font-weight: 700 !important;
+        font-weight: 600 !important;
         min-height: 48px !important;
-        font-size: 0.96rem !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
-        transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+        font-size: 0.95rem !important;
+        transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        background: rgba(30, 41, 59, 0.6) !important;
+        color: #F1F5F9 !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
     }
+    
+    .stButton>button:hover {
+        background: rgba(51, 65, 85, 0.8) !important;
+        border-color: rgba(56, 189, 248, 0.4) !important;
+        color: #FFFFFF !important;
+        transform: translateY(-1px) !important;
+    }
+    
     .stButton>button:active {
-        transform: scale(0.96);
+        transform: scale(0.97) !important;
     }
-    
-    /* Desktop Tab Bar */
-    div[data-baseweb="tab-list"] {
-        gap: 6px !important;
-        overflow-x: auto !important;
-        white-space: nowrap !important;
-        -webkit-overflow-scrolling: touch !important;
-        padding-bottom: 6px !important;
-    }
-    div[data-baseweb="tab"] {
-        padding: 10px 18px !important;
-        font-size: 0.95rem !important;
+
+    /* Primary Accent Buttons */
+    .stButton>button[kind="primary"] {
+        background: linear-gradient(135deg, #38BDF8 0%, #6366F1 100%) !important;
+        border: none !important;
+        color: #FFFFFF !important;
+        box-shadow: 0 4px 18px rgba(56, 189, 248, 0.3) !important;
         font-weight: 700 !important;
-        border-radius: 12px !important;
-        transition: all 0.2s ease !important;
     }
     
-    /* Badges & Indicators */
+    .stButton>button[kind="primary"]:hover {
+        box-shadow: 0 6px 24px rgba(56, 189, 248, 0.45) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* FIXED INTERACTIVE BOTTOM NAVIGATION BAR DOCK */
+    div[data-baseweb="tab-list"] {
+        position: fixed !important;
+        bottom: 12px !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        width: calc(100% - 32px) !important;
+        max-width: 860px !important;
+        z-index: 999999 !important;
+        background: rgba(11, 16, 26, 0.90) !important;
+        backdrop-filter: blur(24px) !important;
+        -webkit-backdrop-filter: blur(24px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        border-radius: 20px !important;
+        padding: 6px 8px !important;
+        display: flex !important;
+        justify-content: space-around !important;
+        align-items: center !important;
+        gap: 6px !important;
+        box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+        margin: 0 !important;
+    }
+    
+    div[data-baseweb="tab"] {
+        flex: 1 !important;
+        text-align: center !important;
+        padding: 10px 4px !important;
+        font-size: 0.84rem !important;
+        font-weight: 600 !important;
+        color: #94A3B8 !important;
+        border-radius: 14px !important;
+        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        background: transparent !important;
+        border: 1px solid transparent !important;
+        margin: 0 !important;
+    }
+    
+    div[data-baseweb="tab"]:hover {
+        color: #F1F5F9 !important;
+        background: rgba(255, 255, 255, 0.04) !important;
+    }
+    
+    div[data-baseweb="tab"][aria-selected="true"] {
+        color: #F8FAFC !important;
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(99, 102, 241, 0.18) 100%) !important;
+        border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        box-shadow: 0 4px 14px rgba(56, 189, 248, 0.15) !important;
+    }
+
+    /* TAB CONTENT SMOOTH LEVEL TRANSITION */
+    div[data-baseweb="tab-panel"] {
+        animation: tabSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+    }
+
+    @keyframes tabSlideUp {
+        0% {
+            opacity: 0;
+            transform: translateY(10px) scale(0.995);
+        }
+        100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+        }
+    }
+    
+    /* Badges & Score Indicators */
     .score-badge-high {
-        background-color: rgba(34, 197, 94, 0.15);
-        color: #4ADE80;
+        background-color: rgba(52, 211, 153, 0.14);
+        color: #34D399;
         padding: 5px 12px;
         border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.86rem;
-        border: 1px solid rgba(74, 222, 128, 0.3);
+        font-weight: 600;
+        font-size: 0.84rem;
+        border: 1px solid rgba(52, 211, 153, 0.3);
         display: inline-block;
         margin: 2px 4px 2px 0;
     }
     
     .score-badge-mid {
-        background-color: rgba(234, 179, 8, 0.15);
-        color: #FACC15;
+        background-color: rgba(251, 191, 36, 0.14);
+        color: #FBBF24;
         padding: 5px 12px;
         border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.86rem;
-        border: 1px solid rgba(250, 204, 21, 0.3);
+        font-weight: 600;
+        font-size: 0.84rem;
+        border: 1px solid rgba(251, 191, 36, 0.3);
         display: inline-block;
         margin: 2px 4px 2px 0;
     }
     
     .score-badge-low {
-        background-color: rgba(239, 68, 68, 0.15);
+        background-color: rgba(248, 113, 113, 0.14);
         color: #F87171;
         padding: 5px 12px;
         border-radius: 20px;
-        font-weight: 700;
-        font-size: 0.86rem;
+        font-weight: 600;
+        font-size: 0.84rem;
         border: 1px solid rgba(248, 113, 113, 0.3);
         display: inline-block;
         margin: 2px 4px 2px 0;
     }
+
+    /* Input fields and Cards styling */
+    div[data-baseweb="input"], div[data-baseweb="textarea"] {
+        border-radius: 14px !important;
+        background: rgba(17, 24, 39, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        color: #F8FAFC !important;
+    }
+
+    div[data-testid="stExpander"] {
+        background: rgba(17, 24, 39, 0.5) !important;
+        border-radius: 16px !important;
+        border: 1px solid rgba(255, 255, 255, 0.07) !important;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
+    }
     
-    /* NATIVE MOBILE BOTTOM NAVIGATION BAR & SMARTPHONE SHELL */
+    /* MOBILE SMARTPHONE ADAPTATIONS */
     @media (max-width: 768px) {
-        /* Immersive Smartphone Container Padding */
         .block-container {
             padding-left: 0.75rem !important;
             padding-right: 0.75rem !important;
             padding-top: 0.5rem !important;
-            padding-bottom: 95px !important; /* Prevents content overlap with bottom nav */
+            padding-bottom: 100px !important;
         }
         
         .main-header {
@@ -195,35 +304,26 @@ st.markdown("""
             margin-bottom: 1rem !important;
         }
         
-        /* Convert Streamlit Tabs into a Real Fixed Mobile Bottom Nav Bar */
         div[data-baseweb="tab-list"] {
-            position: fixed !important;
             bottom: 0 !important;
             left: 0 !important;
-            right: 0 !important;
-            z-index: 999999 !important;
-            background: rgba(15, 23, 42, 0.94) !important;
-            backdrop-filter: blur(20px) !important;
-            -webkit-backdrop-filter: blur(20px) !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+            transform: none !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            border-radius: 0 !important;
+            border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
+            border-left: none !important;
+            border-right: none !important;
+            border-bottom: none !important;
             padding: 8px 4px 14px 4px !important;
-            display: flex !important;
-            justify-content: space-around !important;
-            align-items: center !important;
-            box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.4) !important;
-            margin: 0 !important;
         }
         
         div[data-baseweb="tab"] {
-            flex: 1 !important;
-            text-align: center !important;
+            font-size: 0.76rem !important;
             padding: 8px 2px !important;
-            font-size: 0.78rem !important;
             border-radius: 10px !important;
-            margin: 0 2px !important;
         }
         
-        /* Auto-stack columns vertically on smartphone screens */
         div[data-testid="column"] {
             width: 100% !important;
             flex: 1 1 100% !important;
@@ -231,11 +331,10 @@ st.markdown("""
             margin-bottom: 0.6rem !important;
         }
         
-        /* Full width touch targets */
         .stButton>button {
             width: 100% !important;
             min-height: 48px !important;
-            font-size: 0.96rem !important;
+            font-size: 0.95rem !important;
         }
     }
 </style>
