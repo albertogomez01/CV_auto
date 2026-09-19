@@ -3,6 +3,7 @@ import asyncio
 import os
 import json
 import io
+import uuid
 import streamlit as st
 import pandas as pd
 import requests
@@ -34,10 +35,23 @@ from login_setup import run_login_setup
 load_dotenv()
 
 # ==============================================================================
+# 0. ISOLACIÓN MULTIUSUARIO Y MULTITENANT EN MEMORIA & BASE DE DATOS
+# ==============================================================================
+if "session_uuid" not in st.session_state:
+    st.session_state["session_uuid"] = f"usr_{uuid.uuid4().hex[:8]}"
+
+def get_current_user_id() -> str:
+    """Retorna el ID único de usuario aislado (Telegram Chat ID si está configurado, o UUID de sesión)."""
+    tg_chat = st.session_state.get("eff_chat_id", "").strip()
+    if tg_chat:
+        return tg_chat
+    return st.session_state.get("session_uuid", "default_user")
+
+# ==============================================================================
 # 1. CONFIGURACIÓN DE PÁGINA Y ESTILOS CSS (Dashboard Centrado / App Móvil)
 # ==============================================================================
 st.set_page_config(
-    page_title="CV-auto | Agente Autónomo de Empleo",
+    page_title="CV-auto | Agente Autónomo Multiusuario",
     page_icon="🤖",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -109,14 +123,6 @@ st.markdown("""
         display: flex;
         align-items: center;
         gap: 8px;
-    }
-
-    /* Top Header Bar */
-    .top-header-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 18px;
     }
 
     .main-logo-text {
@@ -223,7 +229,7 @@ st.markdown("""
         opacity: 0 !important;
     }
 
-    /* 6. BARRA DE NAVEGACIÓN INFERIOR PERSISTENTE (4 TABS DOCK) */
+    /* BARRA DE NAVEGACIÓN INFERIOR PERSISTENTE (4 TABS DOCK) */
     div[data-baseweb="tab-list"], [data-baseweb="tab-list"] {
         position: fixed !important;
         bottom: 0px !important;
@@ -629,17 +635,21 @@ Responde con cercanía, inteligencia y empatía sobre orientación laboral en Es
 # ==============================================================================
 # 2. CABECERA (HEADER CON FILA SUPERIOR Y DIÁLOGO MODAL DE CONFIGURACIÓN)
 # ==============================================================================
+current_user_id = get_current_user_id()
 head_col1, head_col2 = st.columns([3.2, 1.2])
 
 with head_col1:
-    st.markdown("""
+    st.markdown(f"""
     <div style="display: flex; align-items: center; gap: 10px;">
         <span class="main-logo-text">CV-auto</span>
         <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-size: 0.76rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3);">
-            ✨ App UI v3.0
+            👥 Multiusuario Aislado
+        </span>
+        <span style="background: rgba(16, 185, 129, 0.15); color: #34D399; font-size: 0.76rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; border: 1px solid rgba(52, 211, 153, 0.3);">
+            🟢 Gratis 24/7
         </span>
     </div>
-    <div class="main-subtitle">Agente Autónomo Multi-Portal • InfoJobs, Indeed, Jooble & Adecco</div>
+    <div class="main-subtitle">Agente Autónomo Multiusuario • ID de Sesión: <code>{current_user_id}</code></div>
     """, unsafe_allow_html=True)
 
 # Modal de Configuración (Expander Popover en la derecha)
@@ -651,6 +661,12 @@ with head_col2:
         api_key_input = st.text_input("🔑 Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
         telegram_token_input = st.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw"), type="password")
         telegram_chat_id_input = st.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", "6270123390"))
+        
+        # Sincronizar ID de usuario con Chat ID si el usuario lo introduce
+        eff_chat = telegram_chat_id_input.strip() if telegram_chat_id_input else ""
+        if eff_chat:
+            st.session_state["eff_chat_id"] = eff_chat
+            current_user_id = get_current_user_id()
         
         st.divider()
         st.markdown("#### 🟢 Estado de Sesión InfoJobs")
@@ -682,6 +698,12 @@ with head_col2:
                 st.error("Configura Bot Token y Chat ID.")
 
 st.write("")
+
+# Auto-cargar CV del usuario desde DB si existe para su chat_id
+if eff_chat and "cv_text" not in st.session_state:
+    db_u = database.get_user(eff_chat)
+    if db_u and db_u.get("cv_text"):
+        st.session_state["cv_text"] = db_u.get("cv_text")
 
 # ==============================================================================
 # 6. BARRA DE NAVEGACIÓN INFERIOR PERSISTENTE (4 PESTAÑAS)
@@ -724,6 +746,10 @@ with tab_home:
                     st.session_state["uploaded_cv_sig"] = file_sig
                     st.session_state.pop("cv_proposal", None)
                     st.success(f"✅ CV '{uploaded_cv.name}' cargado con éxito.")
+                    
+                    # Persistir CV en BD multiusuario si hay chat_id
+                    if eff_chat:
+                        database.upsert_user(chat_id=eff_chat, cv_text=extracted.strip())
                 else:
                     st.error("⚠️ No se pudo leer texto del archivo.")
                     
@@ -746,6 +772,8 @@ Experiencia y Capacidades:
             if cv_edit_text != saved_cv_text and cv_edit_text.strip():
                 st.session_state["cv_text"] = cv_edit_text.strip()
                 st.session_state.pop("cv_proposal", None)
+                if eff_chat:
+                    database.upsert_user(chat_id=eff_chat, cv_text=cv_edit_text.strip())
 
     cv_text = st.session_state.get("cv_text", "")
 
@@ -771,6 +799,7 @@ Experiencia y Capacidades:
             <div class="wire-card-title">👤 Tarjeta Ejemplo / Preview</div>
             <div style="margin-bottom: 8px;"><strong>Candidato Activo:</strong> {candidate_name}</div>
             <div style="margin-bottom: 8px;"><strong>Ubicación Base:</strong> 📍 {detected_loc}</div>
+            <div style="margin-bottom: 8px;"><strong>Sesión Multiusuario:</strong> <code>{current_user_id}</code></div>
             <div style="margin-bottom: 8px;"><strong>Competencias Clave:</strong></div>
             <div style="font-size: 0.85rem; color: #CBD5E1; line-height: 1.4;">{key_skills}</div>
             <div style="margin-top: 10px;">
@@ -844,8 +873,12 @@ Experiencia y Capacidades:
             st.error("Por favor, selecciona al menos un sector de búsqueda.")
         else:
             target_city_clean = target_city.strip() if target_city.strip() else "Alicante"
-            st.info(f"🔎 Ejecutando búsqueda concurrente en InfoJobs, Indeed, Jooble y Adecco en `{target_city_clean}`...")
+            st.info(f"🔎 Ejecutando búsqueda concurrente aislada para `{current_user_id}` en `{target_city_clean}`...")
             
+            # Guardar datos del usuario si hay chat_id
+            if eff_chat:
+                database.upsert_user(chat_id=eff_chat, location=target_city_clean, cv_text=cv_text)
+                
             with st.spinner("⚡ Escaneando portales y evaluando coincidencia con IA Gemini..."):
                 async def do_multirubro_search():
                     async with async_playwright() as p:
@@ -898,7 +931,7 @@ Experiencia y Capacidades:
                     p_bar.progress((idx_f + 1) / len(found_jobs))
                 
                 st.session_state["evaluated_jobs"] = eval_list
-                st.success(f"🎉 ¡Se evaluaron {len(eval_list)} vacantes! Resultados destacados abajo:")
+                st.success(f"🎉 ¡Se evaluaron {len(eval_list)} vacantes para tu sesión! Resultados destacados abajo:")
 
     # RESULTADOS DE EVALUACIÓN
     if "evaluated_jobs" in st.session_state and st.session_state["evaluated_jobs"]:
@@ -908,7 +941,7 @@ Experiencia y Capacidades:
         qualified = [j for j in eval_jobs if j.get("score", 0) >= 75 and j.get("status") not in ["descartada", "discarded"]]
         
         if not qualified:
-            st.info("No hay más vacantes con coincidencia ≥ 75% pendientes de decisión.")
+            st.info("No hay más vacantes con coincidencia ≥ 75% pendientes de decisión en tu sesión.")
         else:
             for idx_q, j in enumerate(qualified):
                 score_val = j.get("score", 75)
@@ -930,7 +963,7 @@ Experiencia y Capacidades:
                                 try:
                                     res = run_async(apply_one())
                                     j["status"] = "applied"
-                                    database.record_application(job_id=j["id"], title=j["title"], company=j["company"], link=j["link"], score=score_val, status="applied")
+                                    database.record_application(job_id=j["id"], title=j["title"], company=j["company"], link=j["link"], score=score_val, status="applied", user_id=current_user_id)
                                     st.toast("✅ ¡Postulado correctamente!")
                                     st.rerun()
                                 except Exception as e:
@@ -938,7 +971,7 @@ Experiencia y Capacidades:
                     with act_col2:
                         if st.button("❌ Descartar", key=f"wire_discard_{j_id}_{idx_q}", use_container_width=True):
                             j["status"] = "descartada"
-                            database.discard_job(job_id=j["id"], title=j["title"], company=j["company"], link=j["link"], score=score_val)
+                            database.discard_job(job_id=j["id"], title=j["title"], company=j["company"], link=j["link"], score=score_val, user_id=current_user_id)
                             st.toast("🗑️ Vacante descartada.")
                             st.rerun()
                 st.divider()
@@ -947,10 +980,10 @@ Experiencia y Capacidades:
 # TAB 2: 💬 CHAT (Asistente Oriol)
 # ==============================================================================
 with tab_chat:
-    st.markdown("""
+    st.markdown(f"""
     <div class="wire-card">
         <div class="wire-card-title">💬 Chat Oriol - Asesor Personal de Empleo</div>
-        <div style="font-size: 0.88rem; color: #94A3B8;">Pregunta tus dudas sobre el CV, ofertas encontradas o estrategia de búsqueda en España.</div>
+        <div style="font-size: 0.88rem; color: #94A3B8;">Sesión Aislada: <code>{current_user_id}</code> | Pregunta tus dudas sobre tu CV o estrategia de búsqueda.</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -976,19 +1009,19 @@ with tab_chat:
             st.session_state["chat_messages"].append({"role": "assistant", "content": reply})
 
 # ==============================================================================
-# TAB 3: 🔔 ALERTAS & TELEGRAM FEED
+# TAB 3: 🔔 ALERTAS & TELEGRAM FEED (Aislado por Usuario)
 # ==============================================================================
 with tab_alertas:
-    st.markdown("""
+    st.markdown(f"""
     <div class="wire-card">
         <div class="wire-card-title">🔔 Alertas Integradas & Feed Telegram</div>
-        <div style="font-size: 0.88rem; color: #94A3B8;">Monitorea tus ofertas en tiempo real y marca vacantes interesadas o descartadas.</div>
+        <div style="font-size: 0.88rem; color: #94A3B8;">Monitorea tus ofertas en tiempo real y marca vacantes interesadas o descartadas para el ID: <code>{current_user_id}</code>.</div>
     </div>
     """, unsafe_allow_html=True)
     
-    apps_db = database.get_all_applications(limit=100)
+    apps_db = database.get_all_applications(limit=100, user_id=current_user_id)
     if not apps_db:
-        st.info("Aún no hay vacantes en el historial de alertas. ¡Ejecuta tu primera búsqueda en la pestaña '🏠 Home'!")
+        st.info("Aún no hay vacantes en tu historial de alertas. ¡Ejecuta tu primera búsqueda en la pestaña '🏠 Home'!")
     else:
         for idx_a, item in enumerate(apps_db):
             st_val = item.get("status", "pending")
@@ -998,31 +1031,31 @@ with tab_alertas:
             ac1, ac2 = st.columns(2)
             with ac1:
                 if st.button("👍 Me interesa", key=f"wire_tg_yes_{item['job_id']}_{idx_a}", use_container_width=True, disabled=(st_val=="interesado")):
-                    database.update_job_status(item['job_id'], "interesado")
+                    database.update_job_status(item['job_id'], "interesado", user_id=current_user_id)
                     st.toast("⭐ Vacante marcada como INTERESANTE.")
                     st.rerun()
             with ac2:
                 if st.button("👎 No me interesa", key=f"wire_tg_no_{item['job_id']}_{idx_a}", use_container_width=True, disabled=(st_val=="descartada")):
-                    database.update_job_status(item['job_id'], "descartada")
+                    database.update_job_status(item['job_id'], "descartada", user_id=current_user_id)
                     st.toast("❌ Vacante descartada.")
                     st.rerun()
             st.divider()
 
 # ==============================================================================
-# TAB 4: 📜 HISTORIAL (Postulaciones Registradas en Base de Datos / Supabase)
+# TAB 4: 📜 HISTORIAL (Postulaciones Aisladas por Usuario en BD)
 # ==============================================================================
 with tab_historial:
-    st.markdown("""
+    st.markdown(f"""
     <div class="wire-card">
-        <div class="wire-card-title">📜 Historial de Postulaciones</div>
-        <div style="font-size: 0.88rem; color: #94A3B8;">Registro completo de postulaciones, vacantes guardadas y descartadas en base de datos.</div>
+        <div class="wire-card-title">📜 Historial de Postulaciones (Multiusuario Aislado)</div>
+        <div style="font-size: 0.88rem; color: #94A3B8;">Registro exclusivo de postulaciones y vacantes guardadas para el usuario <code>{current_user_id}</code>.</div>
     </div>
     """, unsafe_allow_html=True)
     
     if st.button("🔄 Actualizar Datos", key="btn_refresh_history"):
         st.rerun()
         
-    apps = database.get_all_applications(limit=200)
+    apps = database.get_all_applications(limit=200, user_id=current_user_id)
     if apps:
         df = pd.DataFrame(apps)
         st.dataframe(df, use_container_width=True)
@@ -1030,9 +1063,9 @@ with tab_historial:
         st.download_button(
             label="📥 Descargar CSV",
             data=csv_data,
-            file_name="historial_cv_auto.csv",
+            file_name=f"historial_{current_user_id}.csv",
             mime="text/csv",
             key="btn_dl_csv"
         )
     else:
-        st.info("Sin registros en el historial de postulaciones.")
+        st.info("Sin registros en tu historial de postulaciones.")
