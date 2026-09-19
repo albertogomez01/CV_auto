@@ -883,6 +883,9 @@ st.markdown("""
         </div>
     </div>
     <div style="display: flex; gap: 8px; align-items: center;">
+        <span style="background: rgba(56, 189, 248, 0.15); color: #38BDF8; font-size: 0.78rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3);">
+            ✨ App UI v3.0
+        </span>
         <span style="background: rgba(16, 185, 129, 0.15); color: #34D399; font-size: 0.78rem; font-weight: 700; padding: 4px 10px; border-radius: 20px; border: 1px solid rgba(52, 211, 153, 0.3);">
             🟢 Online 24/7
         </span>
