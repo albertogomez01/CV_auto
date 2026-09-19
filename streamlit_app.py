@@ -879,46 +879,74 @@ Experiencia y Capacidades:
             if eff_chat:
                 database.upsert_user(chat_id=eff_chat, location=target_city_clean, cv_text=cv_text)
                 
-            with st.spinner("⚡ Escaneando portales y evaluando coincidencia con IA Gemini..."):
-                async def do_multirubro_search():
-                    async with async_playwright() as p:
-                        dedup_map = {}
-                        for kw_term, sec_lbl in selected_keywords:
-                            try:
-                                ij_t = search_jobs(playwright=p, keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat, headless=True)
-                                ind_t = search_indeed(keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat, playwright=p)
-                                jooble_t = search_jooble(keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat)
-                                adecco_t = search_adecco(keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat, playwright=p, headless=True)
-                                
-                                ij_res, ind_res, jooble_res, adecco_res = await asyncio.gather(ij_t, ind_t, jooble_t, adecco_t, return_exceptions=True)
-                                
-                                if isinstance(ij_res, Exception): ij_res = []
-                                if isinstance(ind_res, Exception): ind_res = []
-                                if isinstance(jooble_res, Exception): jooble_res = []
-                                if isinstance(adecco_res, Exception): adecco_res = []
+            # BARRA DE PROGRESO EN TIEMPO REAL
+            prog_bar = st.progress(0)
+            status_text = st.empty()
+            status_text.markdown("⏳ **[Paso 1/3] Inicializando motores de búsqueda e IA... (5%)**")
+            prog_bar.progress(5)
 
-                                for j in (ij_res + ind_res + jooble_res + adecco_res):
-                                    key = (j.get("title", "").strip().lower(), j.get("company", "").strip().lower())
-                                    if key not in dedup_map:
-                                        j_copy = dict(j)
-                                        j_copy["sector"] = sec_lbl
-                                        dedup_map[key] = j_copy
-                            except Exception:
-                                pass
-                        return list(dedup_map.values())
+            found_jobs = []
+            dedup_map = {}
+            total_kws = len(selected_keywords)
+
+            async def search_single_keyword(p, kw_term, sec_lbl):
+                ij_t = search_jobs(playwright=p, keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat, headless=True)
+                ind_t = search_indeed(keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat, playwright=p)
+                jooble_t = search_jooble(keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat)
+                adecco_t = search_adecco(keywords=kw_term, location=target_city_clean, max_results=max_jobs_per_cat, playwright=p, headless=True)
                 
-                try:
-                    found_jobs = run_async(do_multirubro_search())
-                except Exception as ex:
-                    st.error(f"Error al realizar la búsqueda: {ex}")
-                    found_jobs = []
+                ij_res, ind_res, jooble_res, adecco_res = await asyncio.gather(ij_t, ind_t, jooble_t, adecco_t, return_exceptions=True)
+                
+                if isinstance(ij_res, Exception): ij_res = []
+                if isinstance(ind_res, Exception): ind_res = []
+                if isinstance(jooble_res, Exception): jooble_res = []
+                if isinstance(adecco_res, Exception): adecco_res = []
+
+                results = []
+                for j in (ij_res + ind_res + jooble_res + adecco_res):
+                    j_copy = dict(j)
+                    j_copy["sector"] = sec_lbl
+                    results.append(j_copy)
+                return results
+
+            async def do_full_scan():
+                async with async_playwright() as p:
+                    for idx_kw, (kw_term, sec_lbl) in enumerate(selected_keywords):
+                        pct = int(10 + (idx_kw / total_kws) * 50)
+                        prog_bar.progress(pct)
+                        status_text.markdown(f"🌐 **[Paso 2/3 - Escaneo de Portales]** Buscando **'{kw_term}'** en {target_city_clean} (InfoJobs, Indeed, Jooble)... ({pct}%)")
+                        
+                        try:
+                            kw_jobs = await search_single_keyword(p, kw_term, sec_lbl)
+                            for j in kw_jobs:
+                                key = (j.get("title", "").strip().lower(), j.get("company", "").strip().lower())
+                                if key not in dedup_map:
+                                    dedup_map[key] = j
+                        except Exception as e:
+                            print(f"[Search Error] {kw_term}: {e}")
+
+            try:
+                run_async(do_full_scan())
+                found_jobs = list(dedup_map.values())
+            except Exception as ex:
+                st.error(f"Error al realizar la búsqueda: {ex}")
+                found_jobs = []
+
+            prog_bar.progress(60)
+            status_text.markdown(f"🧠 **[Paso 3/3 - Evaluación IA Gemini]** {len(found_jobs)} ofertas encontradas. Iniciando análisis de coincidencia... (60%)")
 
             if not found_jobs:
+                prog_bar.progress(100)
+                status_text.markdown("ℹ️ **Búsqueda finalizada: No se encontraron nuevas vacantes en este momento.**")
                 st.warning(f"No se encontraron ofertas nuevas en {target_city_clean}.")
             else:
                 eval_list = []
-                p_bar = st.progress(0)
+                total_jobs_count = len(found_jobs)
                 for idx_f, raw_j in enumerate(found_jobs):
+                    pct_eval = int(60 + ((idx_f + 1) / total_jobs_count) * 40)
+                    prog_bar.progress(min(pct_eval, 100))
+                    status_text.markdown(f"🧠 **[Paso 3/3 - IA Gemini]** Evaluando oferta ({idx_f + 1}/{total_jobs_count}): **{raw_j['title']}** en *{raw_j['company']}*... ({pct_eval}%)")
+                    
                     eval_res = evaluate_job_with_gemini(effective_key, cv_text, raw_j, sector=raw_j.get("sector", ""))
                     eval_list.append({
                         **raw_j,
@@ -928,10 +956,11 @@ Experiencia y Capacidades:
                         "killer_answers": eval_res.get("killer_answers", []),
                         "selected": eval_res.get("score", 0) >= 75
                     })
-                    p_bar.progress((idx_f + 1) / len(found_jobs))
-                
+
+                prog_bar.progress(100)
+                status_text.markdown("🎉 **¡Proceso 100% completado con éxito! Resultados listados abajo:**")
                 st.session_state["evaluated_jobs"] = eval_list
-                st.success(f"🎉 ¡Se evaluaron {len(eval_list)} vacantes para tu sesión! Resultados destacados abajo:")
+                st.toast(f"✅ ¡Se evaluaron {len(eval_list)} vacantes!")
 
     # RESULTADOS DE EVALUACIÓN
     if "evaluated_jobs" in st.session_state and st.session_state["evaluated_jobs"]:
