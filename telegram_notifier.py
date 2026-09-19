@@ -1,5 +1,6 @@
 import os
 import asyncio
+import hashlib
 from typing import Dict, Any, Optional
 import httpx
 from dotenv import load_dotenv
@@ -13,7 +14,7 @@ async def send_telegram_notification(
     job: Dict[str, Any]
 ) -> Dict[str, Any]:
     """
-    Dispatches a clean HTML/Markdown notification to a Telegram Chat for high match jobs.
+    Dispatches a clean HTML notification to a Telegram Chat with inline action buttons [✅ Postular] & [❌ Descartar].
     """
     token = bot_token.strip() if bot_token else os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw").strip()
     cid = chat_id.strip() if chat_id else os.getenv("TELEGRAM_CHAT_ID", "8929616203").strip()
@@ -26,11 +27,10 @@ async def send_telegram_notification(
     score = job.get("score", 85)
     platform = job.get("platform", "InfoJobs")
     sector = job.get("sector", "General")
-    link = job.get("link", "#")
-    salary = job.get("salary", "Salario no especificado")
+    link = job.get("link", "https://www.infojobs.net/")
+    salary = job.get("salary", "Salario según convenio")
     location = job.get("location", "España")
 
-    import hashlib
     job_id = job.get("job_id") or job.get("id") or link or f"{title}_{company}"
     job_hash = hashlib.md5(str(job_id).encode("utf-8")).hexdigest()[:16]
 
@@ -42,16 +42,16 @@ async def send_telegram_notification(
         f"💰 <b>Salario:</b> {salary}\n"
         f"🏷️ <b>Plataforma:</b> {platform}\n"
         f"📦 <b>Sector:</b> {sector}\n\n"
-        f"<i>¿Te interesa esta propuesta? Pulsa una opción abajo para actualizar tu historial:</i>"
+        f"<i>¿Qué deseas hacer con esta vacante? Selecciona una opción abajo:</i>"
     )
 
     reply_markup = {
         "inline_keyboard": [
             [
-                {"text": "👍 Me interesa", "callback_data": f"interest_yes_{job_hash}"},
-                {"text": "👎 No me interesa", "callback_data": f"interest_no_{job_hash}"}
+                {"text": "✅ Postular", "callback_data": f"apply_{job_hash}"},
+                {"text": "❌ Descartar", "callback_data": f"dismiss_{job_hash}"}
             ],
-            [{"text": "🔗 Ver Oferta", "url": link}]
+            [{"text": "🔗 Ver Oferta en la Web", "url": link}]
         ]
     }
 
@@ -82,7 +82,7 @@ async def test_telegram_connection(bot_token: str, chat_id: str) -> Dict[str, An
         "title": "Desarrollador / Especialista (Prueba de Sistema)",
         "company": "Sistema Automatizado",
         "score": 95,
-        "platform": "InfoJobs + Indeed + Jooble",
+        "platform": "InfoJobs + Indeed",
         "sector": "Tecnología e IA",
         "link": "https://www.infojobs.net/",
         "salary": "30.000 € / año",

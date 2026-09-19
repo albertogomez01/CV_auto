@@ -261,27 +261,31 @@ async def reanudar_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     else:
         await update.message.reply_text("⚠️ No estás registrado aún. Envía `/start` para comenzar.", parse_mode="HTML")
 
-# --- CALLBACK QUERY HANDLER (Botonera interactiva 👍 / 👎) ---
+# --- CALLBACK QUERY HANDLER (Botonera interactiva [✅ Postular] / [❌ Descartar]) ---
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
     data = query.data
     chat_id = str(query.message.chat_id)
 
-    if data.startswith("interest_yes_"):
-        job_hash = data.replace("interest_yes_", "")
-        updated_job = database.update_job_status(job_hash, "interesado", user_id=chat_id)
-        title = updated_job.get("title", "Oferta") if updated_job else "Oferta"
+    if data.startswith("apply_") or data.startswith("interest_yes_"):
+        job_hash = data.replace("apply_", "").replace("interest_yes_", "")
+        updated_job = database.update_job_status(job_hash, "applied", user_id=chat_id)
+        if not updated_job:
+            updated_job = database.update_job_status(job_hash, "interesado", user_id=chat_id)
+            
+        title = updated_job.get("title", "Oferta de Empleo") if updated_job else "Oferta"
         company = updated_job.get("company", "") if updated_job else ""
-        link = updated_job.get("link", "#") if updated_job else "#"
+        link = updated_job.get("link", "https://www.infojobs.net/") if updated_job else "#"
+        location = updated_job.get("location", "España") if updated_job else "España"
 
-        await query.answer("⭐ Marcada como INTERESANTE. ¡Guardada en tu historial!")
+        await query.answer("✅ ¡Postulación registrada en tu historial!")
         edited_text = (
-            f"⭐ <b>VACANTE MARCADA COMO INTERESANTE</b>\n\n"
+            f"✅ <b>[POSTULACIÓN REGISTRADA]</b>\n\n"
             f"📌 <b>Puesto:</b> {title}\n"
-            f"🏢 <b>Empresa:</b> {company}\n\n"
-            f"<i>Esta vacante ha sido destacada en tu historial de candidaturas.</i>\n"
+            f"🏢 <b>Empresa:</b> {company}\n"
+            f"📍 <b>Ubicación:</b> {location}\n\n"
+            f"<i>Estado: Postulada correctamente. Guardada en tu historial.</i>\n\n"
             f"🔗 <a href='{link}'>Ver Oferta en la web</a>"
         )
         try:
@@ -289,18 +293,18 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         except Exception:
             pass
 
-    elif data.startswith("interest_no_"):
-        job_hash = data.replace("interest_no_", "")
+    elif data.startswith("dismiss_") or data.startswith("interest_no_"):
+        job_hash = data.replace("dismiss_", "").replace("interest_no_", "")
         updated_job = database.update_job_status(job_hash, "descartada", user_id=chat_id)
-        title = updated_job.get("title", "Oferta") if updated_job else "Oferta"
+        title = updated_job.get("title", "Oferta de Empleo") if updated_job else "Oferta"
         company = updated_job.get("company", "") if updated_job else ""
 
         await query.answer("❌ Vacante descartada. No se te volverá a mostrar.")
         edited_text = (
-            f"❌ <b>VACANTE DESCARTADA</b>\n\n"
+            f"❌ <b>[VACANTE DESCARTADA]</b>\n\n"
             f"📌 <b>Puesto:</b> {title}\n"
             f"🏢 <b>Empresa:</b> {company}\n\n"
-            f"<i>Has descartado esta propuesta. Ha sido guardada en la base de datos como descartada para no volver a mostrártela.</i>"
+            f"<i>Estado: Descartada. Se mantendrá oculta en tu base de datos.</i>"
         )
         try:
             await query.edit_message_text(edited_text, parse_mode="HTML")
