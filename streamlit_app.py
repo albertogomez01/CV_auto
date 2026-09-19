@@ -35,10 +35,10 @@ load_dotenv()
 
 # Page configuration
 st.set_page_config(
-    page_title="Agente Autónomo InfoJobs + Gemini",
-    page_icon="🤖",
+    page_title="CV_auto App - Agente Autónomo",
+    page_icon="📱",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
 # Native Smartphone App Shell & Premium Minimalist CSS Styling
@@ -46,22 +46,23 @@ st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     
-    html, body, [class*="css"] {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    /* Base Reset & Typography */
+    html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stMain"], .main {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        background-color: #090D16 !important;
+        background: #090D16 !important;
+        color: #F8FAFC !important;
         -webkit-tap-highlight-color: transparent;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
     }
-    
-    .stApp {
-        background-color: #090D16 !important;
-    }
-    
-    /* Main Content Container Padding to accommodate fixed bottom bar */
+
+    /* Main Content Container Padding for Bottom Floating Dock */
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 120px !important;
-        max-width: 1150px !important;
+        padding-top: 1rem !important;
+        padding-bottom: 110px !important;
+        max-width: 1100px !important;
+        background: #090D16 !important;
     }
 
     /* Prevent iOS Safari automatic zooming on input focus */
@@ -69,11 +70,13 @@ st.markdown("""
         font-size: 16px !important;
     }
     
-    /* Hide Streamlit Header Chrome for immersive App feel */
-    header[data-testid="stHeader"] {
+    /* Completely Hide Default Streamlit Chrome & Headers */
+    [data-testid="stHeader"], header[data-testid="stHeader"], [data-testid="stToolbar"] {
         background: transparent !important;
+        height: 0px !important;
     }
-    footer {
+    footer, #MainMenu, header {
+        visibility: hidden !important;
         display: none !important;
     }
     
@@ -81,6 +84,7 @@ st.markdown("""
     h1, h2, h3, .main-header {
         font-family: 'Outfit', sans-serif !important;
         letter-spacing: -0.02em !important;
+        color: #F8FAFC !important;
     }
     
     /* Native App Bar Top Header */
@@ -88,14 +92,14 @@ st.markdown("""
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 12px 18px;
+        padding: 14px 20px;
         background: rgba(17, 24, 39, 0.75);
         backdrop-filter: blur(20px);
         -webkit-backdrop-filter: blur(20px);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 20px;
-        margin-bottom: 20px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        margin-bottom: 22px;
+        box-shadow: 0 4px 25px rgba(0, 0, 0, 0.3);
     }
     
     .app-title-box {
@@ -105,26 +109,26 @@ st.markdown("""
     }
     .app-title-text {
         font-family: 'Outfit', sans-serif;
-        font-size: 1.3rem;
+        font-size: 1.35rem;
         font-weight: 700;
         color: #F8FAFC;
         letter-spacing: -0.3px;
     }
     
     .main-header {
-        font-size: 1.9rem;
+        font-size: 1.85rem;
         font-weight: 800;
         background: linear-gradient(135deg, #38BDF8 0%, #818CF8 100%);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
-        margin-bottom: 0.35rem;
+        margin-bottom: 0.3rem;
         line-height: 1.25;
     }
     
     .sub-header {
         color: #94A3B8;
-        font-size: 0.98rem;
-        margin-bottom: 1.5rem;
+        font-size: 0.96rem;
+        margin-bottom: 1.4rem;
         line-height: 1.5;
         font-weight: 400;
     }
@@ -139,15 +143,15 @@ st.markdown("""
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
-        background: rgba(30, 41, 59, 0.6) !important;
+        border: 1px solid rgba(255, 255, 255, 0.1) !important;
+        background: rgba(30, 41, 59, 0.7) !important;
         color: #F1F5F9 !important;
-        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15) !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2) !important;
     }
     
     .stButton>button:hover {
-        background: rgba(51, 65, 85, 0.8) !important;
-        border-color: rgba(56, 189, 248, 0.4) !important;
+        background: rgba(51, 65, 85, 0.85) !important;
+        border-color: rgba(56, 189, 248, 0.45) !important;
         color: #FFFFFF !important;
         transform: translateY(-1px) !important;
     }
@@ -161,17 +165,28 @@ st.markdown("""
         background: linear-gradient(135deg, #38BDF8 0%, #6366F1 100%) !important;
         border: none !important;
         color: #FFFFFF !important;
-        box-shadow: 0 4px 18px rgba(56, 189, 248, 0.3) !important;
+        box-shadow: 0 4px 20px rgba(56, 189, 248, 0.35) !important;
         font-weight: 700 !important;
     }
     
     .stButton>button[kind="primary"]:hover {
-        box-shadow: 0 6px 24px rgba(56, 189, 248, 0.45) !important;
+        box-shadow: 0 6px 26px rgba(56, 189, 248, 0.5) !important;
         transform: translateY(-1px) !important;
     }
 
+    /* HIDE STREAMLIT DEFAULT TAB RED/ORANGE HIGHLIGHT & UNDERLINE BORDER */
+    div[data-baseweb="tab-highlight"], 
+    div[data-baseweb="tab-border"], 
+    [data-baseweb="tab-highlight"], 
+    [data-baseweb="tab-border"] {
+        display: none !important;
+        visibility: hidden !important;
+        height: 0px !important;
+        opacity: 0 !important;
+    }
+
     /* FIXED INTERACTIVE BOTTOM NAVIGATION BAR DOCK */
-    div[data-baseweb="tab-list"] {
+    div[data-baseweb="tab-list"], [data-baseweb="tab-list"] {
         position: fixed !important;
         bottom: 12px !important;
         left: 50% !important;
@@ -179,55 +194,60 @@ st.markdown("""
         width: calc(100% - 32px) !important;
         max-width: 860px !important;
         z-index: 999999 !important;
-        background: rgba(11, 16, 26, 0.90) !important;
+        background: rgba(11, 16, 26, 0.92) !important;
         backdrop-filter: blur(24px) !important;
         -webkit-backdrop-filter: blur(24px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        border-radius: 20px !important;
+        border: 1px solid rgba(255, 255, 255, 0.12) !important;
+        border-radius: 24px !important;
         padding: 6px 8px !important;
         display: flex !important;
         justify-content: space-around !important;
         align-items: center !important;
-        gap: 6px !important;
-        box-shadow: 0 16px 40px -10px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) !important;
+        gap: 4px !important;
+        box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
         margin: 0 !important;
     }
     
-    div[data-baseweb="tab"] {
+    /* Target both button and div tab elements */
+    [data-baseweb="tab"], button[data-baseweb="tab"], div[data-baseweb="tab"] {
         flex: 1 !important;
         text-align: center !important;
         padding: 10px 4px !important;
-        font-size: 0.84rem !important;
+        font-size: 0.83rem !important;
         font-weight: 600 !important;
         color: #94A3B8 !important;
-        border-radius: 14px !important;
+        border-radius: 16px !important;
         transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
         background: transparent !important;
         border: 1px solid transparent !important;
         margin: 0 !important;
+        cursor: pointer !important;
+        white-space: nowrap !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     
-    div[data-baseweb="tab"]:hover {
+    [data-baseweb="tab"]:hover, button[data-baseweb="tab"]:hover {
         color: #F1F5F9 !important;
-        background: rgba(255, 255, 255, 0.04) !important;
+        background: rgba(255, 255, 255, 0.05) !important;
     }
     
-    div[data-baseweb="tab"][aria-selected="true"] {
+    [data-baseweb="tab"][aria-selected="true"], button[data-baseweb="tab"][aria-selected="true"] {
         color: #F8FAFC !important;
-        background: linear-gradient(135deg, rgba(56, 189, 248, 0.18) 0%, rgba(99, 102, 241, 0.18) 100%) !important;
-        border: 1px solid rgba(56, 189, 248, 0.35) !important;
-        box-shadow: 0 4px 14px rgba(56, 189, 248, 0.15) !important;
+        background: linear-gradient(135deg, rgba(56, 189, 248, 0.22) 0%, rgba(99, 102, 241, 0.22) 100%) !important;
+        border: 1px solid rgba(56, 189, 248, 0.4) !important;
+        box-shadow: 0 4px 16px rgba(56, 189, 248, 0.2) !important;
     }
 
     /* TAB CONTENT SMOOTH LEVEL TRANSITION */
-    div[data-baseweb="tab-panel"] {
+    div[data-baseweb="tab-panel"], [data-testid="stTabContent"] {
         animation: tabSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
     }
 
     @keyframes tabSlideUp {
         0% {
             opacity: 0;
-            transform: translateY(10px) scale(0.995);
+            transform: translateY(12px) scale(0.99);
         }
         100% {
             opacity: 1;
@@ -273,7 +293,7 @@ st.markdown("""
     }
 
     /* Input fields and Cards styling */
-    div[data-baseweb="input"], div[data-baseweb="textarea"] {
+    div[data-baseweb="input"], div[data-baseweb="textarea"], [data-testid="stFileUploader"] {
         border-radius: 14px !important;
         background: rgba(17, 24, 39, 0.6) !important;
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
@@ -286,25 +306,37 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.07) !important;
         box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1) !important;
     }
+
+    /* Sidebar Glassmorphic Styling */
+    section[data-testid="stSidebar"] {
+        background-color: #0D1322 !important;
+        border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
+    
+    /* Custom Streamlit Alert boxes */
+    div[data-testid="stAlert"] {
+        border-radius: 14px !important;
+        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+    }
     
     /* MOBILE SMARTPHONE ADAPTATIONS */
     @media (max-width: 768px) {
         .block-container {
-            padding-left: 0.75rem !important;
-            padding-right: 0.75rem !important;
-            padding-top: 0.5rem !important;
-            padding-bottom: 100px !important;
+            padding-left: 0.65rem !important;
+            padding-right: 0.65rem !important;
+            padding-top: 0.4rem !important;
+            padding-bottom: 95px !important;
         }
         
         .main-header {
-            font-size: 1.45rem !important;
+            font-size: 1.4rem !important;
         }
         .sub-header {
-            font-size: 0.88rem !important;
+            font-size: 0.86rem !important;
             margin-bottom: 1rem !important;
         }
         
-        div[data-baseweb="tab-list"] {
+        div[data-baseweb="tab-list"], [data-baseweb="tab-list"] {
             bottom: 0 !important;
             left: 0 !important;
             transform: none !important;
@@ -315,11 +347,11 @@ st.markdown("""
             border-left: none !important;
             border-right: none !important;
             border-bottom: none !important;
-            padding: 8px 4px 14px 4px !important;
+            padding: 8px 4px calc(8px + env(safe-area-inset-bottom, 12px)) 4px !important;
         }
         
-        div[data-baseweb="tab"] {
-            font-size: 0.76rem !important;
+        [data-baseweb="tab"], button[data-baseweb="tab"], div[data-baseweb="tab"] {
+            font-size: 0.74rem !important;
             padding: 8px 2px !important;
             border-radius: 10px !important;
         }
@@ -343,7 +375,7 @@ st.markdown("""
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<meta name="theme-color" content="#0F172A">
+<meta name="theme-color" content="#090D16">
 """, unsafe_allow_html=True)
 
 def run_async(coro):
