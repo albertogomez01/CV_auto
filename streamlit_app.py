@@ -993,39 +993,76 @@ Experiencia y Capacidades:
                     status_text.markdown(f"🧠 **[Paso 3/3 - IA Gemini]** Evaluando oferta ({idx_f + 1}/{total_jobs_count}): **{raw_j['title']}** en *{raw_j['company']}*... ({pct_eval}%)")
                     
                     eval_res = evaluate_job_with_gemini(effective_key, cv_text, raw_j, sector=raw_j.get("sector", ""))
-                    eval_list.append({
+                    score_num = eval_res.get("score", 65)
+                    eval_item = {
                         **raw_j,
-                        "score": eval_res.get("score", 50),
+                        "score": score_num,
                         "reasoning": eval_res.get("reasoning", ""),
                         "company_extract": eval_res.get("company_extract", ""),
                         "killer_answers": eval_res.get("killer_answers", []),
-                        "selected": eval_res.get("score", 0) >= 75
-                    })
+                        "status": "pending"
+                    }
+                    eval_list.append(eval_item)
+                    
+                    # Auto-guardar en BD multiusuario del cliente para que aparezca en Alertas e Historial
+                    try:
+                        database.record_application(
+                            job_id=raw_j["id"],
+                            title=raw_j["title"],
+                            company=raw_j["company"],
+                            link=raw_j["link"],
+                            score=score_num,
+                            status="pending",
+                            user_id=current_user_id
+                        )
+                    except Exception:
+                        pass
 
                 prog_bar.progress(100)
-                status_text.markdown("🎉 **¡Proceso 100% completado con éxito! Resultados listados abajo:**")
+                status_text.markdown(f"🎉 **¡Proceso 100% completado! {len(eval_list)} vacantes evaluadas con IA.**")
                 st.session_state["evaluated_jobs"] = eval_list
                 st.toast(f"✅ ¡Se evaluaron {len(eval_list)} vacantes!")
 
     # RESULTADOS DE EVALUACIÓN
     if "evaluated_jobs" in st.session_state and st.session_state["evaluated_jobs"]:
         st.divider()
-        st.markdown("### 📋 Resultados Multirubro (Coincidencia ≥ 75%)")
         eval_jobs = st.session_state["evaluated_jobs"]
-        qualified = [j for j in eval_jobs if j.get("score", 0) >= 75 and j.get("status") not in ["descartada", "discarded"]]
+        # Mostrar todas las vacantes evaluadas no descartadas ordenadas por coincidencia de IA
+        qualified = [j for j in eval_jobs if j.get("status") not in ["descartada", "discarded"]]
+        qualified.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
+        st.markdown(f"### 📋 Resultados de Búsqueda ({len(qualified)} vacantes encontradas)")
         
         if not qualified:
-            st.info("No hay más vacantes con coincidencia ≥ 75% pendientes de decisión en tu sesión.")
+            st.info("No hay vacantes pendientes de decisión en tu sesión actual.")
         else:
             for idx_q, j in enumerate(qualified):
-                score_val = j.get("score", 75)
+                score_val = j.get("score", 65)
                 j_id = j.get("id", f"job_{idx_q}")
+                platform_lbl = j.get("platform", "InfoJobs")
+                
+                # Definir insignia de coincidencia según score
+                if score_val >= 75:
+                    score_badge = f'<span class="chip-badge-green">⭐ Coincidencia Excelente ({score_val}%)</span>'
+                elif score_val >= 55:
+                    score_badge = f'<span class="chip-badge">🔹 Coincidencia Media ({score_val}%)</span>'
+                else:
+                    score_badge = f'<span class="chip-badge-purple">🔸 Coincidencia Básica ({score_val}%)</span>'
                 
                 with st.container():
+                    st.markdown(f"""
+                    <div style="margin-bottom: 6px;">
+                        {score_badge}
+                        <span class="chip-badge-purple">🌐 {platform_lbl}</span>
+                        <span class="chip-badge">📍 {j.get('location', 'Alicante')}</span>
+                    </div>
+                    """, unsafe_allow_html=True)
                     st.markdown(f"#### [{j['title']}]({j['link']})")
-                    st.markdown(f"🏢 **{j['company']}** | 📍 {j.get('location', 'Alicante')} | 🎯 **Score: {score_val}%**")
+                    st.markdown(f"🏢 **{j['company']}** | 💰 {j.get('salary', 'Salario según convenio')}")
                     if j.get("company_extract"):
                         st.caption(f"📝 {j['company_extract']}")
+                    elif j.get("reasoning"):
+                        st.caption(f"💡 {j['reasoning']}")
                         
                     act_col1, act_col2 = st.columns(2)
                     with act_col1:

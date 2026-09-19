@@ -33,7 +33,7 @@ def parse_salary(salary_str: str) -> Optional[int]:
         return max(numbers)
     return None
 
-async def search_infojobs_http(keywords: str, location: str = "", max_results: int = 10) -> List[Dict[str, Any]]:
+async def search_infojobs_http(keywords: str, location: str = "", max_results: int = 10, skip_processed: bool = False) -> List[Dict[str, Any]]:
     """Fast direct HTTP search on InfoJobs search list page."""
     jobs = []
     full_query = f"{keywords} {location}".strip() if (location and location.lower() not in keywords.lower()) else keywords.strip()
@@ -61,7 +61,7 @@ async def search_infojobs_http(keywords: str, location: str = "", max_results: i
                         continue
 
                     job_id = extract_job_id(href)
-                    if is_job_processed(job_id):
+                    if skip_processed and is_job_processed(job_id):
                         continue
 
                     company = "Empresa en InfoJobs"
@@ -99,6 +99,7 @@ async def search_jobs(
     allow_unspecified_salary: bool = True,
     max_results: int = 10,
     headless: bool = True,
+    skip_processed: bool = False,
     **kwargs
 ) -> List[Dict[str, Any]]:
     """
@@ -152,7 +153,7 @@ async def search_jobs(
             for item in card_items[:max_results * 2]:
                 link = item["link"]
                 job_id = extract_job_id(link)
-                if is_job_processed(job_id):
+                if skip_processed and is_job_processed(job_id):
                     continue
 
                 jobs.append({

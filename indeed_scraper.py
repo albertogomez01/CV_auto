@@ -23,7 +23,7 @@ def extract_indeed_job_id(url_or_jk: str) -> str:
         return f"indeed_{match2.group(1)}"
     return f"indeed_{abs(hash(url_or_jk))}"
 
-async def search_indeed_playwright(keywords: str, location: str = "", max_results: int = 10, playwright: Any = None) -> List[Dict[str, Any]]:
+async def search_indeed_playwright(keywords: str, location: str = "", max_results: int = 10, playwright: Any = None, skip_processed: bool = False) -> List[Dict[str, Any]]:
     """Fetches jobs from Indeed using Playwright fast DOM extraction."""
     jobs = []
     q_param = urllib.parse.quote(keywords)
@@ -72,7 +72,7 @@ async def search_indeed_playwright(keywords: str, location: str = "", max_result
         for item in card_items[:max_results * 2]:
             link = item["link"]
             job_id = extract_indeed_job_id(link)
-            if is_job_processed(job_id):
+            if skip_processed and is_job_processed(job_id):
                 continue
 
             jobs.append({
@@ -94,7 +94,7 @@ async def search_indeed_playwright(keywords: str, location: str = "", max_result
 
     return jobs
 
-async def search_indeed_httpx(keywords: str, location: str = "", max_results: int = 10) -> List[Dict[str, Any]]:
+async def search_indeed_httpx(keywords: str, location: str = "", max_results: int = 10, skip_processed: bool = False) -> List[Dict[str, Any]]:
     """Performs HTTP scraping on Indeed Spain."""
     jobs = []
     q_param = urllib.parse.quote(keywords)
@@ -127,7 +127,7 @@ async def search_indeed_httpx(keywords: str, location: str = "", max_results: in
                     href = a_tag["href"]
                     link = href if href.startswith("http") else f"https://es.indeed.com{href}"
                     job_id = extract_indeed_job_id(link)
-                    if is_job_processed(job_id):
+                    if skip_processed and is_job_processed(job_id):
                         continue
 
                     jobs.append({
@@ -149,11 +149,11 @@ async def search_indeed_httpx(keywords: str, location: str = "", max_results: in
 
     return jobs
 
-async def search_indeed(keywords: str = "", location: str = "", max_results: int = 10, playwright: Any = None, headless: bool = True) -> List[Dict[str, Any]]:
+async def search_indeed(keywords: str = "", location: str = "", max_results: int = 10, playwright: Any = None, headless: bool = True, skip_processed: bool = False) -> List[Dict[str, Any]]:
     """Primary entry point for searching Indeed with Playwright & HTTP fallback."""
     jobs = []
     if playwright:
-        jobs = await search_indeed_playwright(keywords, location, max_results, playwright)
+        jobs = await search_indeed_playwright(keywords, location, max_results, playwright, skip_processed=skip_processed)
     if not jobs:
-        jobs = await search_indeed_httpx(keywords, location, max_results)
+        jobs = await search_indeed_httpx(keywords, location, max_results, skip_processed=skip_processed)
     return jobs
