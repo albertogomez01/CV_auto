@@ -57,32 +57,38 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Estilos CSS Limpios con Bordes Redondeados, Tarjetas Sombreadas y Bottom Dock
+# Estilos CSS Limpios con Bordes Redondeados, Tarjetas Sombreadas y Bottom Dock adaptado a iPhone
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
     
     /* Base Reset & Colors */
     html, body, [class*="css"], .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"], [data-testid="stSidebar"], [data-testid="stMain"], .main {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif !important;
         background-color: #090D16 !important;
         background: #090D16 !important;
         color: #F8FAFC !important;
-        -webkit-tap-highlight-color: transparent;
-        -webkit-font-smoothing: antialiased;
+        -webkit-tap-highlight-color: transparent !important;
+        -webkit-font-smoothing: antialiased !important;
     }
 
-    /* Main Container max-width & padding for mobile/web app */
+    /* iPhone Safe Area paddings (Dynamic Island / Notch + Home Indicator Notch) */
     .block-container {
-        padding-top: 1.2rem !important;
-        padding-bottom: 110px !important;
+        padding-top: max(1.2rem, calc(0.6rem + env(safe-area-inset-top, 0px))) !important;
+        padding-bottom: calc(115px + env(safe-area-inset-bottom, 0px)) !important;
+        padding-left: max(0.9rem, env(safe-area-inset-left, 0px)) !important;
+        padding-right: max(0.9rem, env(safe-area-inset-right, 0px)) !important;
         max-width: 960px !important;
         background: #090D16 !important;
+        -webkit-overflow-scrolling: touch !important;
     }
 
-    /* Input font size for iOS Safari */
-    input, select, textarea {
+    /* Prevent iPhone Safari auto-zoom on input focus (minimum font-size 16px required by iOS) */
+    input, select, textarea, .stTextInput input, .stTextArea textarea, .stNumberInput input {
         font-size: 16px !important;
+        -webkit-appearance: none !important;
+        border-radius: 14px !important;
+        touch-action: manipulation !important;
     }
     
     /* Hide Default Streamlit Chrome & Headers */
@@ -97,7 +103,7 @@ st.markdown("""
     
     /* Headings Typography */
     h1, h2, h3, .main-title {
-        font-family: 'Outfit', sans-serif !important;
+        font-family: 'Outfit', -apple-system, sans-serif !important;
         letter-spacing: -0.02em !important;
         color: #F8FAFC !important;
     }
@@ -182,7 +188,7 @@ st.markdown("""
         margin: 3px 4px 3px 0;
     }
 
-    /* Touch-friendly Native Buttons */
+    /* Touch-friendly Native Buttons & Fast Tap Response on iPhone */
     .stButton>button {
         border-radius: 14px !important;
         font-weight: 600 !important;
@@ -193,13 +199,14 @@ st.markdown("""
         background: rgba(30, 41, 59, 0.7) !important;
         color: #F1F5F9 !important;
         box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2) !important;
+        touch-action: manipulation !important;
+        -webkit-user-select: none;
+        user-select: none;
     }
     
-    .stButton>button:hover {
-        background: rgba(51, 65, 85, 0.85) !important;
-        border-color: rgba(56, 189, 248, 0.45) !important;
-        color: #FFFFFF !important;
-        transform: translateY(-1px) !important;
+    .stButton>button:active {
+        transform: scale(0.97) !important;
+        opacity: 0.9 !important;
     }
 
     /* Primary Central Action Button */
@@ -229,7 +236,7 @@ st.markdown("""
         opacity: 0 !important;
     }
 
-    /* BARRA DE NAVEGACIÓN INFERIOR PERSISTENTE (4 TABS DOCK) */
+    /* BARRA DE NAVEGACIÓN INFERIOR PERSISTENTE PARA IPHONE (4 TABS DOCK CON SAFE AREA) */
     div[data-baseweb="tab-list"], [data-baseweb="tab-list"] {
         position: fixed !important;
         bottom: 0px !important;
@@ -237,9 +244,9 @@ st.markdown("""
         right: 0px !important;
         width: 100vw !important;
         max-width: 100% !important;
-        height: 68px !important;
+        height: calc(66px + env(safe-area-inset-bottom, 0px)) !important;
         z-index: 999999 !important;
-        background: rgba(11, 16, 26, 0.95) !important;
+        background: rgba(11, 16, 26, 0.96) !important;
         backdrop-filter: blur(24px) !important;
         -webkit-backdrop-filter: blur(24px) !important;
         border-top: 1px solid rgba(255, 255, 255, 0.12) !important;
@@ -247,7 +254,7 @@ st.markdown("""
         border-right: none !important;
         border-bottom: none !important;
         border-radius: 0px !important;
-        padding: 4px 8px calc(4px + env(safe-area-inset-bottom, 8px)) 8px !important;
+        padding: 4px 6px calc(6px + env(safe-area-inset-bottom, 0px)) 6px !important;
         display: flex !important;
         justify-content: space-around !important;
         align-items: center !important;
@@ -266,11 +273,12 @@ st.markdown("""
             height: 64px !important;
             border-radius: 22px !important;
             border: 1px solid rgba(255, 255, 255, 0.12) !important;
+            padding: 4px 8px !important;
             box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
         }
     }
     
-    /* Target Tab Elements for Vertical Icon + Label Alignment */
+    /* Target Tab Elements for iPhone Touch Alignment */
     [data-baseweb="tab"], button[data-baseweb="tab"], div[data-baseweb="tab"] {
         flex: 1 1 0% !important;
         display: flex !important;
@@ -291,6 +299,9 @@ st.markdown("""
         cursor: pointer !important;
         white-space: pre-line !important;
         line-height: 1.15 !important;
+        touch-action: manipulation !important;
+        -webkit-user-select: none;
+        user-select: none;
     }
     
     [data-baseweb="tab"]:hover, button[data-baseweb="tab"]:hover {
@@ -316,12 +327,13 @@ st.markdown("""
         100% { opacity: 1; transform: translateY(0); }
     }
 
-    /* Popover Modal Styling */
+    /* Popover Modal & Input Sizing for iPhone */
     div[data-testid="stPopoverBody"] {
         background-color: #0F172A !important;
         border: 1px solid rgba(255, 255, 255, 0.12) !important;
         border-radius: 18px !important;
         box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6) !important;
+        max-width: calc(100vw - 24px) !important;
     }
 
     div[data-baseweb="input"], div[data-baseweb="textarea"], [data-testid="stFileUploader"] {
@@ -330,13 +342,46 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.08) !important;
         color: #F8FAFC !important;
     }
+
+    /* File Uploader Touch Optimization for iPhone */
+    [data-testid="stFileUploader"] {
+        padding: 12px !important;
+        border-radius: 16px !important;
+        border: 1.5px dashed rgba(56, 189, 248, 0.35) !important;
+        background: rgba(15, 23, 42, 0.7) !important;
+    }
+    [data-testid="stFileUploader"] button {
+        min-height: 44px !important;
+        border-radius: 12px !important;
+        font-size: 0.9rem !important;
+    }
+
+    /* iPhone Screen Adjustments (< 480px) */
+    @media (max-width: 480px) {
+        .main-logo-text {
+            font-size: 1.7rem !important;
+        }
+        .wire-card {
+            padding: 14px 14px !important;
+            border-radius: 16px !important;
+        }
+        .wire-card-title {
+            font-size: 1.05rem !important;
+        }
+        .main-subtitle {
+            font-size: 0.84rem !important;
+        }
+    }
 </style>
 
-<!-- Mobile PWA Meta Headers -->
+<!-- Mobile PWA & iPhone iOS Native Meta Headers -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-title" content="CV-auto">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#090D16">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f916.png">
 """, unsafe_allow_html=True)
 
 # Helper functions
