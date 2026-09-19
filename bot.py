@@ -19,6 +19,11 @@ if sys.platform == "win32":
         pass
 
 from pypdf import PdfReader
+try:
+    import docx
+except ImportError:
+    docx = None
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import Conflict
 from telegram.ext import (
@@ -38,6 +43,60 @@ from jooble_scraper import search_jooble
 from adecco_scraper import search_adecco
 
 load_dotenv()
+
+# --- HELPER FUNCTIONS FOR CV & IMMEDIATE SEARCH ---
+
+def extract_cv_text_from_bytes(file_bytes: bytes, file_name: str) -> str:
+    ext = os.path.splitext(file_name)[1].lower() if file_name else ""
+    text = ""
+
+    if ext == ".pdf":
+        try:
+            pdf_stream = io.BytesIO(file_bytes)
+            reader = PdfReader(pdf_stream)
+            pages_text = [page.extract_text() or "" for page in reader.pages]
+            text = "\n".join(pages_text).strip()
+        except Exception as e:
+            print(f"[PDF Extract Error]: {e}")
+    elif ext == ".docx":
+        if docx is not None:
+            try:
+                doc_stream = io.BytesIO(file_bytes)
+                doc_obj = docx.Document(doc_stream)
+                text = "\n".join([p.text for p in doc_obj.paragraphs if p.text.strip()]).strip()
+            except Exception as e:
+                print(f"[DOCX Extract Error]: {e}")
+        else:
+            print("[DOCX Extract Warning]: python-docx library is not installed.")
+    elif ext == ".doc":
+        try:
+            raw = file_bytes.decode("utf-8", errors="ignore")
+            printable = "".join([c if (32 <= ord(c) <= 126 or c in "\n\r\táéíóúÁÉÍÓÚñÑ") else " " for c in raw])
+            clean_lines = [line.strip() for line in printable.splitlines() if len(line.strip()) > 3]
+            text = "\n".join(clean_lines).strip()
+        except Exception as e:
+            print(f"[DOC Extract Error]: {e}")
+    elif ext in [".txt", ".md"]:
+        try:
+            text = file_bytes.decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            print(f"[TXT Extract Error]: {e}")
+    else:
+        try:
+            text = file_bytes.decode("utf-8", errors="ignore").strip()
+        except Exception:
+            text = ""
+
+    return text
+
+async def trigger_immediate_user_search(user_rec: Dict[str, Any]):
+    try:
+        from run_cron_cycle import run_user_cycle, get_gemini_client
+        token = os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw").strip()
+        client = get_gemini_client()
+        await run_user_cycle(user_rec, token, client)
+    except Exception as e:
+        print(f"⚠️ [Immediate Search Error] {e}")
 
 # --- CONVERSATION STATES FOR ONBOARDING ---
 WAITING_ROLE, WAITING_LOCATION, WAITING_CV = range(3)
@@ -83,7 +142,7 @@ async def process_location(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     msg = (
         f"📍 Ubicación registrada: <b>{loc_text}</b>\n\n"
-        "<b>Paso 3 de 3 (Final):</b> Adjunta aquí tu Currículum en <b>PDF</b> (o escribe directamente un resumen de tu experiencia laboral) para que la IA evalúe la compatibilidad con las vacantes."
+        "<b>Paso 3 de 3 (Final):</b> Adjunta tu Currículum en <b>PDF, Word (.docx) o Texto</b> (o escribe directamente tu experiencia) para que la IA evalúe las vacantes."
     )
     await update.message.reply_text(msg, parse_mode="HTML")
     return WAITING_CV
@@ -98,20 +157,13 @@ async def process_cv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     extracted_text = ""
 
-    # Extraer texto de archivo PDF o TXT adjunto
     if update.message.document:
         doc = update.message.document
         file_name = doc.file_name or ""
         try:
             tg_file = await doc.get_file()
             file_bytes = await tg_file.download_as_bytearray()
-            if file_name.lower().endswith(".pdf"):
-                pdf_stream = io.BytesIO(file_bytes)
-                reader = PdfReader(pdf_stream)
-                pages_text = [page.extract_text() or "" for page in reader.pages]
-                extracted_text = "\n".join(pages_text).strip()
-            elif file_name.lower().endswith(".txt"):
-                extracted_text = file_bytes.decode("utf-8", errors="ignore").strip()
+            extracted_text = extract_cv_text_from_bytes(file_bytes, file_name)
         except Exception as e:
             print(f"[Onboarding CV Upload] Error: {e}")
 
@@ -121,7 +173,6 @@ async def process_cv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not extracted_text:
         extracted_text = f"Perfil profesional enfocado en {role} en {location}."
 
-    # Insertar o actualizar registro de usuario en la base de datos SQLite
     user_rec = database.upsert_user(
         chat_id=chat_id,
         username=username,
@@ -131,6 +182,8 @@ async def process_cv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         active=1
     )
 
+    asyncio.create_task(trigger_immediate_user_search(user_rec))
+
     preview = extracted_text[:200] + ("..." if len(extracted_text) > 200 else "")
 
     confirm_msg = (
@@ -139,7 +192,7 @@ async def process_cv(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         f"🎯 <b>Puesto objetivo:</b> {role}\n"
         f"📍 <b>Ubicación:</b> {location}\n"
         f"📄 <b>Perfil CV ({len(extracted_text)} caracteres):</b>\n<i>\"{preview}\"</i>\n\n"
-        "🔔 A partir de este momento, el sistema buscará periódicamente en <b>InfoJobs, Indeed, Jooble y Adecco</b> y te enviará las mejores ofertas a este chat.\n\n"
+        "⚡ <b>¡Búsqueda inicial activada!</b> Estoy escaneando vacantes ahora mismo en <b>InfoJobs, Indeed, Jooble y Adecco</b>. En 1-2 minutos recibirás las primeras alertas.\n\n"
         "💡 <b>Comandos útiles:</b>\n"
         "• `/miperfil` - Revisa tu perfil registrado\n"
         "• `/pausar` - Pausa el envío de alertas\n"
@@ -271,28 +324,17 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
     try:
         tg_file = await doc.get_file()
         file_bytes = await tg_file.download_as_bytearray()
-        extracted_text = ""
-
-        if file_name.lower().endswith(".pdf"):
-            pdf_stream = io.BytesIO(file_bytes)
-            reader = PdfReader(pdf_stream)
-            pages_text = [page.extract_text() or "" for page in reader.pages]
-            extracted_text = "\n".join(pages_text).strip()
-        elif file_name.lower().endswith(".txt"):
-            extracted_text = file_bytes.decode("utf-8", errors="ignore").strip()
-        else:
-            await update.message.reply_text("⚠️ Formato no soportado. Por favor, sube un archivo <b>.pdf</b> o <b>.txt</b>.", parse_mode="HTML")
-            return
+        extracted_text = extract_cv_text_from_bytes(file_bytes, file_name)
 
         if not extracted_text:
-            await update.message.reply_text("⚠️ No se pudo extraer texto legible del documento.", parse_mode="HTML")
+            await update.message.reply_text("⚠️ No se pudo extraer texto legible del documento. Sube un archivo PDF, Word (.docx) o texto plano.", parse_mode="HTML")
             return
 
         existing = database.get_user(chat_id)
         job_title = existing.get("job_title", "Desarrollador Python") if existing else "Desarrollador Python"
         location = existing.get("location", "Alicante") if existing else "Alicante"
 
-        database.upsert_user(
+        user_rec = database.upsert_user(
             chat_id=chat_id,
             username=username,
             job_title=job_title,
@@ -301,13 +343,15 @@ async def handle_document_upload(update: Update, context: ContextTypes.DEFAULT_T
             active=1
         )
 
+        asyncio.create_task(trigger_immediate_user_search(user_rec))
+
         preview = extracted_text[:250] + ("..." if len(extracted_text) > 250 else "")
 
         await update.message.reply_text(
             f"✅ <b>¡CV Actualizado y Guardado!</b>\n\n"
             f"<b>Vista previa ({len(extracted_text)} caracteres):</b>\n"
             f"<i>\"{preview}\"</i>\n\n"
-            "La IA evaluará las siguientes ofertas comparándolas contra este nuevo perfil.",
+            "⚡ <b>¡Búsqueda inmediata iniciada!</b> La IA está analizando vacantes para tu nuevo perfil.",
             parse_mode="HTML"
         )
     except Exception as e:

@@ -259,23 +259,37 @@ def run_async(coro):
         loop.close()
 
 def extract_text_from_file(uploaded_file) -> str:
-    """Extracts raw text from uploaded PDF or TXT file."""
+    """Extracts raw text from uploaded PDF, DOCX, DOC, or TXT file."""
     filename = uploaded_file.name.lower()
+    file_bytes = uploaded_file.read()
+    
     if filename.endswith(".pdf"):
         try:
             import pypdf
-            pdf_reader = pypdf.PdfReader(io.BytesIO(uploaded_file.read()))
+            pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
             text = "\n".join([page.extract_text() or "" for page in pdf_reader.pages])
-            return text.strip()
+            if text.strip():
+                return text.strip()
         except Exception as e:
-            st.error(f"Error al leer el archivo PDF: {e}")
-            return ""
-    else:
+            st.warning(f"Aviso al leer PDF: {e}")
+            
+    elif filename.endswith(".docx") or filename.endswith(".doc"):
         try:
-            return uploaded_file.read().decode("utf-8", errors="ignore").strip()
+            import docx
+            document = docx.Document(io.BytesIO(file_bytes))
+            text = "\n".join([p.text for p in document.paragraphs if p.text]).strip()
+            if text:
+                return text
         except Exception as e:
-            st.error(f"Error al leer el archivo de texto: {e}")
-            return ""
+            st.warning(f"Aviso al leer documento Word: {e}")
+
+    try:
+        raw_txt = file_bytes.decode("utf-8", errors="ignore").strip()
+        import re
+        return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', raw_txt).strip()
+    except Exception as e:
+        st.error(f"Error al procesar el archivo: {e}")
+        return ""
 
 def get_gemini_client(api_key: str):
     """Initializes Gemini API client using available SDK."""
@@ -740,7 +754,7 @@ with tab_workflow:
     
     cv_col1, cv_col2 = st.columns([1, 1])
     with cv_col1:
-        uploaded_cv = st.file_uploader("📂 Sube tu CV (PDF o TXT)", type=["pdf", "txt", "md"])
+        uploaded_cv = st.file_uploader("📂 Sube tu CV (PDF, Word DOCX o TXT)", type=["pdf", "docx", "doc", "txt", "md"])
     
     cv_text = ""
     if uploaded_cv is not None:
