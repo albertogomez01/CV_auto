@@ -260,36 +260,69 @@ def run_async(coro):
 
 def extract_text_from_file(uploaded_file) -> str:
     """Extracts raw text from uploaded PDF, DOCX, DOC, or TXT file."""
-    filename = uploaded_file.name.lower()
-    file_bytes = uploaded_file.read()
+    if uploaded_file is None:
+        return ""
     
-    if filename.endswith(".pdf"):
+    try:
+        file_bytes = uploaded_file.getvalue()
+    except Exception:
+        try:
+            uploaded_file.seek(0)
+            file_bytes = uploaded_file.read()
+        except Exception:
+            return ""
+
+    if not file_bytes:
+        return ""
+        
+    filename = uploaded_file.name.lower()
+    ext = os.path.splitext(filename)[1]
+    
+    text = ""
+    if ext == ".pdf":
         try:
             import pypdf
             pdf_reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-            text = "\n".join([page.extract_text() or "" for page in pdf_reader.pages])
-            if text.strip():
-                return text.strip()
+            pages_text = [page.extract_text() or "" for page in pdf_reader.pages]
+            text = "\n".join(pages_text).strip()
         except Exception as e:
             st.warning(f"Aviso al leer PDF: {e}")
             
-    elif filename.endswith(".docx") or filename.endswith(".doc"):
+    elif ext == ".docx":
         try:
             import docx
             document = docx.Document(io.BytesIO(file_bytes))
-            text = "\n".join([p.text for p in document.paragraphs if p.text]).strip()
-            if text:
-                return text
+            text = "\n".join([p.text for p in document.paragraphs if p.text.strip()]).strip()
         except Exception as e:
-            st.warning(f"Aviso al leer documento Word: {e}")
+            st.warning(f"Aviso al leer documento Word (.docx): {e}")
 
-    try:
-        raw_txt = file_bytes.decode("utf-8", errors="ignore").strip()
-        import re
-        return re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', raw_txt).strip()
-    except Exception as e:
-        st.error(f"Error al procesar el archivo: {e}")
-        return ""
+    elif ext == ".doc":
+        try:
+            raw = file_bytes.decode("utf-8", errors="ignore")
+            printable = "".join([c if (32 <= ord(c) <= 126 or c in "\n\r\táéíóúÁÉÍÓÚñÑ") else " " for c in raw])
+            clean_lines = [line.strip() for line in printable.splitlines() if len(line.strip()) > 3]
+            text = "\n".join(clean_lines).strip()
+        except Exception as e:
+            st.warning(f"Aviso al leer documento Word (.doc): {e}")
+
+    elif ext in [".txt", ".md"]:
+        try:
+            text = file_bytes.decode("utf-8", errors="ignore").strip()
+        except Exception as e:
+            st.warning(f"Aviso al leer texto: {e}")
+
+    if not text:
+        try:
+            raw_txt = file_bytes.decode("utf-8", errors="ignore").strip()
+            if not raw_txt.startswith("%PDF") and not raw_txt.startswith("PK") and "\x00" not in raw_txt:
+                import re
+                clean = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]', '', raw_txt).strip()
+                if len(clean) > 10:
+                    text = clean
+        except Exception:
+            pass
+
+    return text
 
 def get_gemini_client(api_key: str):
     """Initializes Gemini API client using available SDK."""
@@ -754,17 +787,32 @@ with tab_workflow:
     
     cv_col1, cv_col2 = st.columns([1, 1])
     with cv_col1:
-        uploaded_cv = st.file_uploader("📂 Sube tu CV (PDF, Word DOCX o TXT)", type=["pdf", "docx", "doc", "txt", "md"])
+        uploaded_cv = st.file_uploader(
+            "📂 Sube tu CV (PDF, Word DOCX, DOC o TXT)",
+            type=["pdf", "docx", "doc", "txt", "md"],
+            key="file_uploader_cv"
+        )
     
-    cv_text = ""
+    # Process uploaded file if present
     if uploaded_cv is not None:
-        cv_text = extract_text_from_file(uploaded_cv)
-        st.success(f"✅ CV cargado correctamente ({len(cv_text)} caracteres leídos)")
+        file_sig = f"{uploaded_cv.name}_{uploaded_cv.size}"
+        if st.session_state.get("uploaded_cv_sig") != file_sig:
+            extracted = extract_text_from_file(uploaded_cv)
+            if extracted and len(extracted.strip()) > 10:
+                st.session_state["cv_text"] = extracted.strip()
+                st.session_state["uploaded_cv_sig"] = file_sig
+                st.session_state.pop("cv_proposal", None) # Invalidate old gemini analysis
+                st.success(f"✅ ¡CV '{uploaded_cv.name}' cargado correctamente! ({len(extracted)} caracteres)")
+            else:
+                st.error("⚠️ No se pudo extraer texto legible del archivo. Por favor sube un archivo PDF o Word válido o edita el texto a la derecha.")
     
+    saved_cv_text = st.session_state.get("cv_text", "")
+
     with cv_col2:
-        with st.expander("✏️ O edita/pega el texto de tu CV aquí", expanded=(not cv_text)):
-            cv_text = st.text_area("Texto del CV", value=cv_text if cv_text else """
-Candidato: Alex González
+        with st.expander("✏️ Ver / Editar texto del CV cargado", expanded=(not saved_cv_text)):
+            text_area_val = st.text_area(
+                "Texto del CV",
+                value=saved_cv_text if saved_cv_text else """Candidato: Alex González
 Ubicación: Alicante
 Perfil: Desarrollador y especialista polivalente en atención al cliente, logística, reposición y servicios.
 
@@ -773,10 +821,15 @@ Experiencia y Capacidades:
 - Atención al cliente y cobro en caja (Cajero/a en supermercados y comercio).
 - Reposición de mercancía, colocación en lineal, control de fechas de caducidad e inventario (Reponedor/a).
 - Recepción de palés, preparación de pedidos (picking/packing), uso de transpaleta manual (Mozo de almacén / Logística).
-- Carné de conducir B, vehículo propio y disponibilidad inmediata.
-""", height=160)
+- Carné de conducir B, vehículo propio y disponibilidad inmediata.""",
+                height=180,
+                key="cv_text_area_widget"
+            )
+            if text_area_val != saved_cv_text and text_area_val.strip():
+                st.session_state["cv_text"] = text_area_val.strip()
+                st.session_state.pop("cv_proposal", None)
 
-    st.session_state["cv_text"] = cv_text
+    cv_text = st.session_state.get("cv_text", text_area_val if 'text_area_val' in locals() else "")
     st.divider()
 
     # STEP 2: DYNAMIC PROFILE EXTRACTION & MULTIRUBRO FILTERS PANEL
