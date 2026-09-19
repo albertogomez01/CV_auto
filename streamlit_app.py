@@ -660,7 +660,7 @@ with head_col2:
         
         api_key_input = st.text_input("🔑 Gemini API Key", value=os.getenv("GEMINI_API_KEY", ""), type="password")
         telegram_token_input = st.text_input("🤖 Telegram Bot Token", value=os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw"), type="password")
-        telegram_chat_id_input = st.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", "6270123390"))
+        telegram_chat_id_input = st.text_input("💬 Telegram Chat ID", value=os.getenv("TELEGRAM_CHAT_ID", "8929616203"))
         
         # Sincronizar ID de usuario con Chat ID si el usuario lo introduce
         eff_chat = telegram_chat_id_input.strip() if telegram_chat_id_input else ""

@@ -198,7 +198,7 @@ async def run_single_cycle():
 
     # Si no hay usuarios en la base de datos pero existen credenciales por entorno, crear usuario por defecto
     if not active_users:
-        env_chat = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+        env_chat = os.getenv("TELEGRAM_CHAT_ID", "8929616203").strip()
         if env_chat:
             print(f"ℹ️ Creando perfil inicial para el Chat ID del entorno: {env_chat}")
             default_user = database.upsert_user(

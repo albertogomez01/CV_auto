@@ -2,6 +2,8 @@ import asyncio
 import re
 import urllib.parse
 from typing import List, Dict, Any, Optional
+import httpx
+from bs4 import BeautifulSoup
 from playwright.async_api import Playwright, Page, TimeoutError as PlaywrightTimeoutError
 from browser import get_browser_context, create_stealth_page
 from database import is_job_processed, record_application
@@ -46,6 +48,58 @@ def parse_salary(salary_str: str) -> Optional[int]:
             return max(numbers) * 12
         return max(numbers)
     return None
+
+async def search_infojobs_rss(keywords: str, location: str = "", max_results: int = 10) -> List[Dict[str, Any]]:
+    """Fetches InfoJobs jobs via RSS XML feed (immune to Cloudflare JS challenges)."""
+    jobs = []
+    full_query = f"{keywords} {location}".strip() if (location and location.lower() not in keywords.lower()) else keywords.strip()
+    encoded_kw = urllib.parse.quote(full_query)
+    rss_url = f"https://www.infojobs.net/jobsearch/search-results/rss.xhtml?keyword={encoded_kw}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,*/*;q=0.8",
+        "Accept-Language": "es-ES,es;q=0.9,en;q=0.8"
+    }
+    try:
+        async with httpx.AsyncClient(headers=headers, timeout=12.0, follow_redirects=True) as client:
+            res = await client.get(rss_url)
+            if res.status_code == 200 and ("<item>" in res.text or "<rss" in res.text):
+                soup = BeautifulSoup(res.text, "xml" if "xml" in res.headers.get("content-type", "") else "html.parser")
+                items = soup.find_all("item")
+                for item in items[:max_results * 2]:
+                    t_el = item.find("title")
+                    l_el = item.find("link")
+                    d_el = item.find("description")
+                    c_el = item.find("author") or item.find("dc:creator")
+                    
+                    if not t_el or not l_el:
+                        continue
+                    
+                    title = t_el.get_text(strip=True)
+                    link = l_el.get_text(strip=True)
+                    company = c_el.get_text(strip=True) if c_el else "Empresa en InfoJobs"
+                    job_id = extract_job_id(link)
+                    if is_job_processed(job_id):
+                        continue
+                        
+                    jobs.append({
+                        "id": job_id,
+                        "title": title,
+                        "company": company,
+                        "link": link,
+                        "salary": "Salario publicado en oferta",
+                        "location": location if location else "España",
+                        "modality": "Presencial",
+                        "platform": "InfoJobs",
+                        "description": d_el.get_text(strip=True) if d_el else f"Oferta de empleo: {title} en {company}.",
+                        "has_killer_questions": False,
+                        "killer_questions": []
+                    })
+                    if len(jobs) >= max_results:
+                        break
+    except Exception as e:
+        print(f"[InfoJobs Scraper] RSS Error: {e}")
+    return jobs
 
 async def search_jobs(
     playwright: Playwright,
@@ -215,6 +269,10 @@ async def search_jobs(
 
     finally:
         await context.close()
+
+    if not jobs:
+        print("[InfoJobs Scraper] Playwright DOM returned 0 jobs (Cloudflare or block). Attempting InfoJobs RSS XML feed fallback...")
+        jobs = await search_infojobs_rss(keywords, location, max_results)
 
     return jobs
 

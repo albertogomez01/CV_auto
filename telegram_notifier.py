@@ -16,7 +16,7 @@ async def send_telegram_notification(
     Dispatches a clean HTML/Markdown notification to a Telegram Chat for high match jobs.
     """
     token = bot_token.strip() if bot_token else os.getenv("TELEGRAM_BOT_TOKEN", "8929616203:AAGJ_XAfVo3AeKq_icY3HyJ0sN4ki5H0YVw").strip()
-    cid = chat_id.strip() if chat_id else os.getenv("TELEGRAM_CHAT_ID", "6270123390").strip()
+    cid = chat_id.strip() if chat_id else os.getenv("TELEGRAM_CHAT_ID", "8929616203").strip()
 
     if not token or not cid:
         return {"status": "skipped", "message": "Telegram Bot Token or Chat ID not configured."}
